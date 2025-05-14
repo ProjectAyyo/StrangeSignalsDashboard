@@ -1,0 +1,8 @@
+node_modules
+dashboard/node_modules
+.git
+.gitignore
+.env
+*.log
+dashboard/src
+README.md 

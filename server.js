@@ -291,7 +291,11 @@ function scheduleFollowUpChecks(id, ticker, action, initial_price) {
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-    res.status(200).json({ status: 'ok' });
+    res.status(200).json({ 
+        status: 'ok',
+        version: '1.0.1',
+        timestamp: new Date().toISOString()
+    });
 });
 
 // Serve React dashboard

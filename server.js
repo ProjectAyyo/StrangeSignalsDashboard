@@ -1,7 +1,7 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const fetch = require('node-fetch');
-const sqlite3 = require('sqlite3').verbose();
+const mysql = require('mysql2/promise');
 const schedule = require('node-schedule');
 const path = require('path');
 require('dotenv').config();
@@ -10,140 +10,67 @@ const app = express();
 // Use PORT environment variable provided by Cloud Run, fallback to 80 for local development
 const port = process.env.PORT || 80;
 
-// Initialize SQLite database
-const db = new sqlite3.Database(path.join(__dirname, 'alerts.db'), (err) => {
-    if (err) {
-        console.error('Error opening database:', err);
-    } else {
-        console.log('Connected to SQLite database');
+// Initialize MySQL connection pool
+const pool = mysql.createPool({
+    host: process.env.DB_HOST || 'localhost',
+    user: process.env.DB_USER || 'root',
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME || 'signals_dashboard',
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0
+});
+
+// Initialize database tables
+async function initializeDatabase() {
+    try {
+        const connection = await pool.getConnection();
         
-        // First, check if we need to migrate the table
-        db.get("SELECT name FROM sqlite_master WHERE type='table' AND name='alerts'", (err, table) => {
-            if (err) {
-                console.error('Error checking table:', err);
-                return;
-            }
+        // Create alerts table if it doesn't exist
+        await connection.execute(`
+            CREATE TABLE IF NOT EXISTS alerts (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                ticker VARCHAR(10) NOT NULL,
+                action ENUM('Buy', 'Sell') NOT NULL,
+                initial_price DECIMAL(10,2) NOT NULL,
+                price_4m DECIMAL(10,2),
+                accuracy_4m TINYINT CHECK (accuracy_4m IN (0, 1)),
+                price_20m DECIMAL(10,2),
+                accuracy_20m TINYINT CHECK (accuracy_20m IN (0, 1)),
+                price_1h DECIMAL(10,2),
+                accuracy_1h TINYINT CHECK (accuracy_1h IN (0, 1)),
+                price_next DECIMAL(10,2),
+                accuracy_next TINYINT CHECK (accuracy_next IN (0, 1))
+            )
+        `);
 
-            if (table) {
-                // Table exists, check if it needs migration
-                db.get("PRAGMA table_info(alerts)", (err, columns) => {
-                    if (err) {
-                        console.error('Error checking columns:', err);
-                        return;
-                    }
-
-                    // Convert columns to array and check if initial_price exists
-                    const columnsArray = Array.isArray(columns) ? columns : [columns];
-                    if (!columnsArray.some(col => col && col.name === 'initial_price')) {
-                        console.log('Migrating alerts table to new schema...');
-                        
-                        // Create new table with updated schema
-                        db.serialize(() => {
-                            // Begin transaction
-                            db.run('BEGIN TRANSACTION');
-
-                            // Create new table with updated schema
-                            db.run(`
-                                CREATE TABLE alerts_new (
-                                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-                                    ticker TEXT NOT NULL,
-                                    action TEXT NOT NULL CHECK(action IN ('Buy', 'Sell')),
-                                    initial_price REAL NOT NULL,
-                                    price_4m REAL,
-                                    accuracy_4m INTEGER CHECK(accuracy_4m IN (0, 1)),
-                                    price_20m REAL,
-                                    accuracy_20m INTEGER CHECK(accuracy_20m IN (0, 1)),
-                                    price_1h REAL,
-                                    accuracy_1h INTEGER CHECK(accuracy_1h IN (0, 1)),
-                                    price_next REAL,
-                                    accuracy_next INTEGER CHECK(accuracy_next IN (0, 1))
-                                )
-                            `);
-
-                            // Copy data from old table to new table
-                            db.run(`
-                                INSERT INTO alerts_new (id, timestamp, ticker, action, initial_price)
-                                SELECT id, timestamp, ticker, action, 0.0
-                                FROM alerts
-                            `);
-
-                            // Drop old table
-                            db.run('DROP TABLE alerts');
-
-                            // Rename new table to old name
-                            db.run('ALTER TABLE alerts_new RENAME TO alerts');
-
-                            // Commit transaction
-                            db.run('COMMIT', (err) => {
-                                if (err) {
-                                    console.error('Error during migration:', err);
-                                    db.run('ROLLBACK');
-                                } else {
-                                    console.log('Migration completed successfully');
-                                    // Schedule the next-day open job after migration
-                                    scheduleNextDayChecks();
-                                }
-                            });
-                        });
-                    } else {
-                        console.log('Alerts table is up to date');
-                        // Schedule the next-day open job
-                        scheduleNextDayChecks();
-                    }
-                });
-            } else {
-                // Table doesn't exist, create it with new schema
-                db.run(`
-                    CREATE TABLE alerts (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-                        ticker TEXT NOT NULL,
-                        action TEXT NOT NULL CHECK(action IN ('Buy', 'Sell')),
-                        initial_price REAL NOT NULL,
-                        price_4m REAL,
-                        accuracy_4m INTEGER CHECK(accuracy_4m IN (0, 1)),
-                        price_20m REAL,
-                        accuracy_20m INTEGER CHECK(accuracy_20m IN (0, 1)),
-                        price_1h REAL,
-                        accuracy_1h INTEGER CHECK(accuracy_1h IN (0, 1)),
-                        price_next REAL,
-                        accuracy_next INTEGER CHECK(accuracy_next IN (0, 1))
-                    )
-                `, (err) => {
-                    if (err) {
-                        console.error('Error creating table:', err);
-                    } else {
-                        console.log('Alerts table created successfully');
-                        // Schedule the next-day open job
-                        scheduleNextDayChecks();
-                    }
-                });
-            }
-        });
-
-        // Add price_checks table
-        db.run(`
+        // Create price_checks table if it doesn't exist
+        await connection.execute(`
             CREATE TABLE IF NOT EXISTS price_checks (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                alert_id INTEGER NOT NULL,
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                alert_id INT NOT NULL,
                 scheduled_time DATETIME NOT NULL,
-                status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'completed', 'failed')),
-                price REAL,
+                status ENUM('pending', 'completed', 'failed') DEFAULT 'pending',
+                price DECIMAL(10,2),
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (alert_id) REFERENCES alerts(id)
             )
-        `, (err) => {
-            if (err) {
-                console.error('Error creating price_checks table:', err);
-            } else {
-                console.log('Price checks table ready');
-                // Rebuild schedules for pending checks on server start
-                rebuildSchedules();
-            }
-        });
+        `);
+
+        connection.release();
+        console.log('Database tables initialized successfully');
+        
+        // Schedule the next-day open job
+        scheduleNextDayChecks();
+    } catch (err) {
+        console.error('Error initializing database:', err);
+        throw err;
     }
-});
+}
+
+// Initialize database on startup
+initializeDatabase().catch(console.error);
 
 // Discord webhook URL
 const DISCORD_WEBHOOK_URL = 'https://discordapp.com/api/webhooks/1194064309727277156/UGEhwvhxGKgq8SO6zW1NlunmLIHN0JFjbHXLUA7fkeRX4Di3pJUXsnq1RROq31cPP7vk';
@@ -195,20 +122,12 @@ async function fetchCurrentPrice(ticker) {
 }
 
 // Function to store alert in database
-function storeAlert(ticker, action, initialPrice) {
-    return new Promise((resolve, reject) => {
-        db.run(
-            'INSERT INTO alerts (ticker, action, initial_price) VALUES (?, ?, ?)',
-            [ticker, action, initialPrice],
-            function(err) {
-                if (err) {
-                    reject(err);
-                } else {
-                    resolve(this.lastID);
-                }
-            }
-        );
-    });
+async function storeAlert(ticker, action, initialPrice) {
+    const [result] = await pool.execute(
+        'INSERT INTO alerts (ticker, action, initial_price) VALUES (?, ?, ?)',
+        [ticker, action, initialPrice]
+    );
+    return result.insertId;
 }
 
 // Function to send message to Discord
@@ -234,69 +153,56 @@ async function sendToDiscord(data) {
 }
 
 // Function to schedule a price check
-function schedulePriceCheck(alertId, ticker, scheduledTime) {
-    return new Promise((resolve, reject) => {
-        db.run(
-            'INSERT INTO price_checks (alert_id, scheduled_time) VALUES (?, ?)',
-            [alertId, scheduledTime.toISOString()],
-            function(err) {
-                if (err) {
-                    reject(err);
-                    return;
-                }
-                const checkId = this.lastID;
-                
-                // Schedule the job
-                const job = schedule.scheduleJob(scheduledTime, async () => {
-                    try {
-                        const price = await fetchCurrentPrice(ticker);
-                        // Update price check record
-                        db.run(
-                            'UPDATE price_checks SET status = ?, price = ? WHERE id = ?',
-                            ['completed', price, checkId]
-                        );
-                        console.log(`Price check completed for ${ticker} at ${scheduledTime}: ${price}`);
-                    } catch (error) {
-                        console.error(`Price check failed for ${ticker} at ${scheduledTime}:`, error);
-                        db.run(
-                            'UPDATE price_checks SET status = ? WHERE id = ?',
-                            ['failed', checkId]
-                        );
-                    }
-                });
-
-                resolve(checkId);
-            }
-        );
+async function schedulePriceCheck(alertId, ticker, scheduledTime) {
+    const [result] = await pool.execute(
+        'INSERT INTO price_checks (alert_id, scheduled_time) VALUES (?, ?)',
+        [alertId, scheduledTime.toISOString()]
+    );
+    const checkId = result.insertId;
+    
+    // Schedule the job
+    const job = schedule.scheduleJob(scheduledTime, async () => {
+        try {
+            const price = await fetchCurrentPrice(ticker);
+            // Update price check record
+            await pool.execute(
+                'UPDATE price_checks SET status = ?, price = ? WHERE id = ?',
+                ['completed', price, checkId]
+            );
+            console.log(`Price check completed for ${ticker} at ${scheduledTime}: ${price}`);
+        } catch (error) {
+            console.error(`Price check failed for ${ticker} at ${scheduledTime}:`, error);
+            await pool.execute(
+                'UPDATE price_checks SET status = ? WHERE id = ?',
+                ['failed', checkId]
+            );
+        }
     });
+
+    return checkId;
 }
 
 // Function to rebuild schedules on server start
-function rebuildSchedules() {
-    db.all(
+async function rebuildSchedules() {
+    const [rows] = await pool.execute(
         'SELECT pc.id, pc.alert_id, pc.scheduled_time, a.ticker FROM price_checks pc ' +
         'JOIN alerts a ON pc.alert_id = a.id WHERE pc.status = ?',
-        ['pending'],
-        (err, rows) => {
-            if (err) {
-                console.error('Error rebuilding schedules:', err);
-                return;
-            }
-            rows.forEach(row => {
-                const scheduledTime = new Date(row.scheduled_time);
-                if (scheduledTime > new Date()) {
-                    schedulePriceCheck(row.alert_id, row.ticker, scheduledTime);
-                    console.log(`Rebuilt schedule for ${row.ticker} at ${scheduledTime}`);
-                } else {
-                    // Mark old pending checks as failed
-                    db.run(
-                        'UPDATE price_checks SET status = ? WHERE id = ?',
-                        ['failed', row.id]
-                    );
-                }
-            });
-        }
+        ['pending']
     );
+    
+    for (const row of rows) {
+        const scheduledTime = new Date(row.scheduled_time);
+        if (scheduledTime > new Date()) {
+            schedulePriceCheck(row.alert_id, row.ticker, scheduledTime);
+            console.log(`Rebuilt schedule for ${row.ticker} at ${scheduledTime}`);
+        } else {
+            // Mark old pending checks as failed
+            await pool.execute(
+                'UPDATE price_checks SET status = ? WHERE id = ?',
+                ['failed', row.id]
+            );
+        }
+    }
 }
 
 // Function to schedule next-day open checks
@@ -306,8 +212,8 @@ function scheduleNextDayChecks() {
         async () => {
             // only update alerts lacking price_next
             const rows = await new Promise((resolve, reject) => {
-                db.all(
-                    `SELECT id, ticker, action, initial_price FROM alerts WHERE price_next IS NULL`,
+                pool.execute(`
+                    SELECT id, ticker, action, initial_price FROM alerts WHERE price_next IS NULL`,
                     (err, rows) => {
                         if (err) reject(err);
                         else resolve(rows);
@@ -324,7 +230,7 @@ function scheduleNextDayChecks() {
                     const accuracy = (action === 'Buy' ? price > initial_price : price < initial_price) ? 1 : 0;
                     
                     await new Promise((resolve, reject) => {
-                        db.run(
+                        pool.execute(
                             `UPDATE alerts SET price_next = ?, accuracy_next = ? WHERE id = ?`,
                             [price, accuracy, id],
                             (err) => {
@@ -365,7 +271,7 @@ function scheduleFollowUpChecks(id, ticker, action, initial_price) {
                 const accuracy = (action === 'Buy' ? price > initial_price : price < initial_price) ? 1 : 0;
                 
                 await new Promise((resolve, reject) => {
-                    db.run(
+                    pool.execute(
                         `UPDATE alerts SET price_${key} = ?, accuracy_${key} = ? WHERE id = ?`,
                         [price, accuracy, id],
                         (err) => {
@@ -399,25 +305,20 @@ app.get('/dashboard/*', (req, res) => {
 // Get all alerts endpoint
 app.get('/api/alerts', async (req, res) => {
     try {
-        const rows = await new Promise((resolve, reject) => {
-            db.all(`
-                SELECT
-                    id,
-                    timestamp,
-                    ticker,
-                    action,
-                    initial_price,
-                    price_4m,    accuracy_4m,
-                    price_20m,   accuracy_20m,
-                    price_1h,    accuracy_1h,
-                    price_next,  accuracy_next
-                FROM alerts
-                ORDER BY timestamp DESC
-            `, (err, rows) => {
-                if (err) reject(err);
-                else resolve(rows);
-            });
-        });
+        const [rows] = await pool.execute(`
+            SELECT
+                id,
+                timestamp,
+                ticker,
+                action,
+                initial_price,
+                price_4m,    accuracy_4m,
+                price_20m,   accuracy_20m,
+                price_1h,    accuracy_1h,
+                price_next,  accuracy_next
+            FROM alerts
+            ORDER BY timestamp DESC
+        `);
         res.json(rows);
     } catch (err) {
         console.error('Error fetching alerts:', err);
@@ -435,16 +336,7 @@ app.post('/webhook', async (req, res) => {
         console.log(`Current price for ${ticker}: ${currentPrice}`);
 
         // Store alert and get its ID
-        const alertId = await new Promise((resolve, reject) => {
-            db.run(
-                'INSERT INTO alerts (ticker, action, initial_price) VALUES (?, ?, ?)',
-                [ticker, action, currentPrice],
-                function(err) {
-                    if (err) reject(err);
-                    else resolve(this.lastID);
-                }
-            );
-        });
+        const alertId = await storeAlert(ticker, action, currentPrice);
 
         // Schedule follow-up checks
         scheduleFollowUpChecks(alertId, ticker, action, currentPrice);
@@ -467,15 +359,15 @@ app.post('/webhook', async (req, res) => {
 });
 
 // Cleanup on server shutdown
-process.on('SIGINT', () => {
-    db.close((err) => {
-        if (err) {
-            console.error('Error closing database:', err);
-        } else {
-            console.log('Database connection closed');
-        }
+process.on('SIGINT', async () => {
+    try {
+        await pool.end();
+        console.log('Database connection closed');
         process.exit(0);
-    });
+    } catch (err) {
+        console.error('Error closing database:', err);
+        process.exit(1);
+    }
 });
 
 // Start the server

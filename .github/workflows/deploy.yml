@@ -25,11 +25,22 @@ jobs:
       uses: actions/setup-node@v3
       with:
         node-version: '18'
+        cache: 'yarn'
+
+    - name: Cache yarn dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          **/node_modules
+          **/.yarn-cache
+        key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-yarn-
 
     - name: Build Frontend
       run: |
         cd dashboard
-        yarn install
+        yarn install --frozen-lockfile
         yarn build
         cd ..
 
@@ -53,4 +64,22 @@ jobs:
           --image gcr.io/$PROJECT_ID/$SERVICE_NAME:${{ github.sha }} \
           --region $REGION \
           --platform managed \
-          --allow-unauthenticated 
+          --allow-unauthenticated \
+          --set-env-vars="FINNHUB_API_KEY=${{ secrets.FINNHUB_API_KEY }},DISCORD_WEBHOOK_URL=${{ secrets.DISCORD_WEBHOOK_URL }},DB_HOST=${{ secrets.DB_HOST }},DB_USER=${{ secrets.DB_USER }},DB_PASSWORD=${{ secrets.DB_PASSWORD }},DB_NAME=${{ secrets.DB_NAME }}" \
+          --min-instances=1 \
+          --max-instances=10 \
+          --cpu=1 \
+          --memory=512Mi \
+          --port=8080 \
+          --timeout=300s \
+          --concurrency=80 \
+          --add-cloudsql-instances=${{ secrets.CLOUDSQL_INSTANCE }}
+
+    - name: Verify Deployment
+      run: |
+        # Wait for deployment to be ready
+        sleep 30
+        # Get the service URL
+        SERVICE_URL=$(gcloud run services describe $SERVICE_NAME --region $REGION --format 'value(status.url)')
+        # Check health endpoint
+        curl -f $SERVICE_URL/health || exit 1 

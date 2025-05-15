@@ -12,7 +12,30 @@ yarn install
 2. Create a `.env` file (optional):
 ```bash
 PORT=3000  # Change this if you want to use a different port
+DB_HOST=localhost  # Database host
+DB_USER=root      # Database user
+DB_PASSWORD=      # Database password
+DB_NAME=signals_dashboard  # Database name
 ```
+
+## Database Setup
+
+### Local Development
+1. Install MySQL if you haven't already
+2. Create a new database:
+```sql
+CREATE DATABASE signals_dashboard;
+```
+3. Update the `.env` file with your database credentials
+
+### Production (Cloud SQL)
+1. Create a Cloud SQL instance in your Google Cloud project
+2. Add the following secrets to your GitHub repository:
+   - `DB_HOST`: Cloud SQL instance connection name
+   - `DB_USER`: Database user
+   - `DB_PASSWORD`: Database password
+   - `DB_NAME`: Database name
+   - `CLOUDSQL_INSTANCE`: Cloud SQL instance name
 
 ## Running the Server
 

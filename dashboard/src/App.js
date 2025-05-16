@@ -5,6 +5,8 @@ import AlertsTable from './components/AlertsTable';
 import AccuracyPie from './components/AccuracyPie';
 import AccuracyBar from './components/AccuracyBar';
 
+const GRAPHQL_ENDPOINT = '/graphql';
+
 function App() {
   const [alerts, setAlerts] = useState([]);
   const [filters, setFilters] = useState({ ticker: '', action: '', from: null, to: null });
@@ -29,9 +31,40 @@ function App() {
   useEffect(() => {
     const fetchAlerts = async () => {
       try {
-        const res = await axios.get('/api/alerts');
-        console.log('Fetched alerts:', res.data);
-        setAlerts(res.data);
+        const res = await axios.post(GRAPHQL_ENDPOINT, {
+          query: `{
+            alerts {
+              id
+              symbol
+              signal
+              price
+              timestamp
+              status
+              notes
+            }
+          }`
+        }, {
+          headers: { 'Content-Type': 'application/json' }
+        });
+        // Map GraphQL fields to dashboard fields
+        const mapped = res.data.data.alerts.map(a => ({
+          id: a.id,
+          ticker: a.symbol,
+          action: a.signal,
+          initial_price: a.price,
+          timestamp: a.timestamp,
+          // The following are placeholders; update as needed
+          price_4m: a.price,
+          price_20m: a.price,
+          price_1h: a.price,
+          price_next: a.price,
+          accuracy_4m: null,
+          accuracy_20m: null,
+          accuracy_1h: null,
+          accuracy_next: null,
+          notes: a.notes,
+        }));
+        setAlerts(mapped);
       } catch (err) {
         console.error('Error fetching alerts:', err);
       }

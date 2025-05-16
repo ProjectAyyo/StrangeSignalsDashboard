@@ -9,6 +9,14 @@ const typeDefs = gql`
     timestamp: String!
     status: String!
     notes: String
+    price_4m: Float
+    price_20m: Float
+    price_1h: Float
+    price_next: Float
+    accuracy_4m: Int
+    accuracy_20m: Int
+    accuracy_1h: Int
+    accuracy_next: Int
   }
 
   input AlertInput {

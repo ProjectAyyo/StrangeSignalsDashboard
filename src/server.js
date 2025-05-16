@@ -39,9 +39,29 @@ const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
 // Add this after app and before startServer()
 app.post('/webhook', express.json(), async (req, res) => {
   try {
-    const { symbol, signal, price, notes } = req.body;
-    if (!symbol || !signal || typeof price !== 'number') {
-      return res.status(400).json({ error: 'Missing required fields: symbol, signal, price' });
+    let { symbol, signal, price, notes, content } = req.body;
+    // If symbol/signal are missing but content is present, parse content (e.g., 'AAPL Buy')
+    if ((!symbol || !signal) && content) {
+      // Try to extract symbol and signal from content
+      const match = content.match(/^(\w+)\s+(Buy|Sell)$/i);
+      if (match) {
+        symbol = match[1].toUpperCase();
+        signal = match[2].charAt(0).toUpperCase() + match[2].slice(1).toLowerCase();
+      }
+    }
+    if (!symbol || !signal) {
+      return res.status(400).json({ error: 'Missing required fields: symbol, signal' });
+    }
+    if (typeof price !== 'number') {
+      // Fetch current price from Finnhub if price is missing
+      if (!FINNHUB_API_KEY) {
+        return res.status(400).json({ error: 'Price missing and FINNHUB_API_KEY not set' });
+      }
+      try {
+        price = await fetchFinnhubPrice(symbol);
+      } catch (err) {
+        return res.status(500).json({ error: 'Failed to fetch price from Finnhub', details: err.message });
+      }
     }
     // Call the createAlert mutation directly
     const alert = await resolvers.Mutation.createAlert(null, { input: { symbol, signal, price, notes } });
@@ -51,7 +71,7 @@ app.post('/webhook', express.json(), async (req, res) => {
       await fetch(DISCORD_WEBHOOK_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: `ALERT: ${symbol} ${signal} at $${price}${notes ? ' - ' + notes : ''}` })
+        body: JSON.stringify({ content: `${symbol} ${signal} $${price}${notes ? ' - ' + notes : ''}` })
       });
     }
 
@@ -159,7 +179,7 @@ async function startServer() {
     expressMiddleware(server)
   );
 
-  const PORT = 80;
+  const PORT = process.env.PORT || 8080;
   httpServer.listen(PORT, () => {
     console.log(`🚀 Server ready at http://localhost:${PORT}/graphql`);
     console.log(`🚀 Subscriptions ready at ws://localhost:${PORT}/graphql`);

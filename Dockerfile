@@ -7,8 +7,8 @@ COPY package.json yarn.lock ./
 RUN yarn install --frozen-lockfile
 
 # Copy server code
-COPY server.js ./
-COPY alerts.db ./
+COPY src ./src
+COPY data ./data
 
 # Copy built frontend
 COPY dashboard/build ./dashboard/build
@@ -21,4 +21,4 @@ ENV PORT=8080
 EXPOSE 8080
 
 # Start the server
-CMD ["node", "server.js"] 
+CMD ["node", "src/server.js"] 

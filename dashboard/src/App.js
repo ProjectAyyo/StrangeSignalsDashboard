@@ -41,6 +41,14 @@ function App() {
               timestamp
               status
               notes
+              price_4m
+              price_20m
+              price_1h
+              price_next
+              accuracy_4m
+              accuracy_20m
+              accuracy_1h
+              accuracy_next
             }
           }`
         }, {
@@ -53,15 +61,14 @@ function App() {
           action: a.signal,
           initial_price: a.price,
           timestamp: a.timestamp,
-          // The following are placeholders; update as needed
-          price_4m: a.price,
-          price_20m: a.price,
-          price_1h: a.price,
-          price_next: a.price,
-          accuracy_4m: null,
-          accuracy_20m: null,
-          accuracy_1h: null,
-          accuracy_next: null,
+          price_4m: a.price_4m,
+          price_20m: a.price_20m,
+          price_1h: a.price_1h,
+          price_next: a.price_next,
+          accuracy_4m: a.accuracy_4m,
+          accuracy_20m: a.accuracy_20m,
+          accuracy_1h: a.accuracy_1h,
+          accuracy_next: a.accuracy_next,
           notes: a.notes,
         }));
         setAlerts(mapped);

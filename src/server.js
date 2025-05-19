@@ -38,47 +38,134 @@ const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
 
 // Add this after app and before startServer()
 app.post('/webhook', express.json(), async (req, res) => {
+  console.log('=== Webhook Request Received ===');
+  console.log('Headers:', JSON.stringify(req.headers, null, 2));
+  console.log('Body:', JSON.stringify(req.body, null, 2));
+  
   try {
     let { symbol, signal, price, notes, content } = req.body;
-    // If symbol/signal are missing but content is present, parse content (e.g., 'AAPL Buy')
+    console.log('Parsed request data:', { symbol, signal, price, notes, content });
+
+    // If symbol/signal are missing but content is present, parse content
     if ((!symbol || !signal) && content) {
-      // Try to extract symbol and signal from content
+      console.log('Attempting to parse content:', content);
       const match = content.match(/^(\w+)\s+(Buy|Sell)$/i);
       if (match) {
         symbol = match[1].toUpperCase();
         signal = match[2].charAt(0).toUpperCase() + match[2].slice(1).toLowerCase();
+        console.log('Parsed from content:', { symbol, signal });
       }
     }
-    if (!symbol || !signal) {
-      return res.status(400).json({ error: 'Missing required fields: symbol, signal' });
-    }
-    if (typeof price !== 'number') {
-      // Fetch current price from Finnhub if price is missing
-      if (!FINNHUB_API_KEY) {
-        return res.status(400).json({ error: 'Price missing and FINNHUB_API_KEY not set' });
-      }
-      try {
-        price = await fetchFinnhubPrice(symbol);
-      } catch (err) {
-        return res.status(500).json({ error: 'Failed to fetch price from Finnhub', details: err.message });
-      }
-    }
-    // Call the createAlert mutation directly
-    const alert = await resolvers.Mutation.createAlert(null, { input: { symbol, signal, price, notes } });
 
-    // Forward to Discord webhook
-    if (DISCORD_WEBHOOK_URL) {
-      await fetch(DISCORD_WEBHOOK_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: `${symbol} ${signal} $${price}${notes ? ' - ' + notes : ''}` })
+    // Validate required fields
+    if (!symbol || !signal) {
+      console.error('Validation failed: Missing required fields', { symbol, signal });
+      return res.status(400).json({ 
+        error: 'Missing required fields: symbol, signal',
+        received: { symbol, signal, price, notes, content }
       });
     }
 
-    res.json({ status: 'ok', alert });
+    // Handle price
+    if (typeof price !== 'number') {
+      console.log('Price validation:', { 
+        receivedPrice: price, 
+        type: typeof price,
+        hasFinnhubKey: !!FINNHUB_API_KEY 
+      });
+      
+      if (!FINNHUB_API_KEY) {
+        console.error('Price missing and FINNHUB_API_KEY not set');
+        return res.status(400).json({ 
+          error: 'Price missing and FINNHUB_API_KEY not set',
+          received: { symbol, signal, price, notes, content }
+        });
+      }
+
+      try {
+        console.log('Fetching price from Finnhub for symbol:', symbol);
+        price = await fetchFinnhubPrice(symbol);
+        console.log('Finnhub price received:', price);
+      } catch (err) {
+        console.error('Finnhub price fetch error:', err);
+        return res.status(500).json({ 
+          error: 'Failed to fetch price from Finnhub', 
+          details: err.message,
+          received: { symbol, signal, price, notes, content }
+        });
+      }
+    }
+
+    // Create alert
+    console.log('Attempting to create alert with data:', { symbol, signal, price, notes });
+    try {
+      const alert = await resolvers.Mutation.createAlert(null, { 
+        input: { symbol, signal, price, notes } 
+      });
+      console.log('Alert created successfully:', alert);
+
+      // Forward to Discord
+      if (DISCORD_WEBHOOK_URL) {
+        console.log('Forwarding to Discord webhook:', DISCORD_WEBHOOK_URL);
+        const discordMessage = `${symbol} ${signal} $${price}${notes ? ' - ' + notes : ''}`;
+        console.log('Discord message:', discordMessage);
+        
+        try {
+          const discordResponse = await fetch(DISCORD_WEBHOOK_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content: discordMessage })
+          });
+          console.log('Discord response status:', discordResponse.status);
+          if (!discordResponse.ok) {
+            console.error('Discord webhook error:', await discordResponse.text());
+          }
+        } catch (discordErr) {
+          console.error('Discord webhook error:', discordErr);
+        }
+      } else {
+        console.log('Discord webhook URL not configured');
+      }
+
+      console.log('Webhook request completed successfully');
+      res.json({ status: 'ok', alert });
+    } catch (alertErr) {
+      console.error('Alert creation error:', alertErr);
+      console.error('Alert creation error stack:', alertErr.stack);
+      res.status(500).json({ 
+        error: 'Failed to create alert', 
+        details: alertErr.message,
+        stack: alertErr.stack,
+        received: { symbol, signal, price, notes, content }
+      });
+    }
   } catch (err) {
-    console.error('Webhook error:', err);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error('Webhook general error:', err);
+    console.error('Webhook error stack:', err.stack);
+    res.status(500).json({ 
+      error: 'Internal server error', 
+      details: err.message,
+      stack: err.stack,
+      received: req.body
+    });
+  }
+});
+
+app.delete('/webhook/:id', async (req, res) => {
+  console.log('=== Delete Alert Request ===');
+  console.log('Alert ID:', req.params.id);
+  
+  try {
+    const sql = 'DELETE FROM alerts WHERE id = ?';
+    await db.runQuery(sql, [req.params.id]);
+    console.log('Alert deleted successfully');
+    res.json({ status: 'ok', message: 'Alert deleted' });
+  } catch (err) {
+    console.error('Delete alert error:', err);
+    res.status(500).json({ 
+      error: 'Failed to delete alert', 
+      details: err.message 
+    });
   }
 });
 
@@ -175,6 +262,61 @@ async function runWorker() {
 setInterval(runWorker, 60 * 1000);
 runWorker().catch(err => { console.error('Worker error:', err); });
 // --- End worker logic ---
+
+// Add this before startServer()
+app.get('/health', async (req, res) => {
+  const health = {
+    uptime: process.uptime(),
+    timestamp: Date.now(),
+    status: 'healthy',
+    components: {
+      database: 'unknown',
+      discord: 'unknown',
+      system: 'healthy'
+    }
+  };
+
+  try {
+    // Test database connection
+    const dbResult = await db.query("SELECT COUNT(*) as count FROM alerts");
+    health.components.database = 'connected';
+    health.database = {
+      alertCount: dbResult[0].count,
+      lastAlert: (await db.query("SELECT timestamp FROM alerts ORDER BY timestamp DESC LIMIT 1"))[0]?.timestamp
+    };
+  } catch (err) {
+    health.components.database = 'error';
+    health.database = { error: err.message };
+    health.status = 'degraded';
+  }
+
+  try {
+    // Test Discord webhook
+    if (DISCORD_WEBHOOK_URL) {
+      const testResult = await fetch(DISCORD_WEBHOOK_URL, {
+        method: 'HEAD'
+      });
+      health.components.discord = testResult.ok ? 'connected' : 'error';
+    } else {
+      health.components.discord = 'not_configured';
+    }
+  } catch (err) {
+    health.components.discord = 'error';
+    health.discord = { error: err.message };
+    health.status = 'degraded';
+  }
+
+  // Add system metrics
+  health.system = {
+    memory: process.memoryUsage(),
+    nodeVersion: process.version,
+    environment: process.env.NODE_ENV
+  };
+
+  // Set appropriate status code
+  const statusCode = health.status === 'healthy' ? 200 : 503;
+  res.status(statusCode).json(health);
+});
 
 async function startServer() {
   await server.start();

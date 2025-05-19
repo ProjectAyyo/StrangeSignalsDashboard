@@ -4,7 +4,13 @@ const { promisify } = require('util');
 
 class Database {
   constructor() {
-    this.db = new sqlite3.Database(path.join(__dirname, '../../data/alerts.db'));
+    // Use /tmp in production, local data directory in development
+    const dbPath = process.env.NODE_ENV === 'production' 
+      ? '/tmp/alerts.db'
+      : path.join(__dirname, '../../data/alerts.db');
+    
+    console.log('Database path:', dbPath);
+    this.db = new sqlite3.Database(dbPath);
     this.run = promisify(this.db.run.bind(this.db));
     this.get = promisify(this.db.get.bind(this.db));
     this.all = promisify(this.db.all.bind(this.db));

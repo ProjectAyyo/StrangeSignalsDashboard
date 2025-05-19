@@ -92,6 +92,13 @@ app.get('/dashboard/*', (req, res) => {
   res.sendFile(path.join(__dirname, '../dashboard/build/index.html'));
 });
 
+// Serve the landing page at '/'
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, '../public/index.html'));
+});
+
+app.use(express.static(path.join(__dirname, '../public')));
+
 // --- Worker logic for price/accuracy updates ---
 const FINNHUB_API_KEY = process.env.FINNHUB_API_KEY;
 if (!FINNHUB_API_KEY) {
@@ -189,4 +196,4 @@ async function startServer() {
 startServer().catch((err) => {
   console.error('Error starting server:', err);
   process.exit(1);
-}); 
+});

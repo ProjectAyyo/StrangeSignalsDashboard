@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Strange Capital - We Generate Wealth Together</title>
+  <link href="https://fonts.googleapis.com/css?family=Montserrat:400,700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    body {
+      font-family: 'Montserrat', Arial, sans-serif;
+      margin: 0;
+      background: #fff;
+      color: #222;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 24px 5vw 12px 5vw;
+      background: #fff;
+      border-bottom: 2px solid #e5e7eb;
+    }
+    .logo {
+      font-size: 2rem;
+      font-weight: 700;
+      color: #1e3a8a;
+      border: 4px solid #1e3a8a;
+      padding: 4px 18px;
+      border-radius: 4px;
+      background: #fff;
+      letter-spacing: 1px;
+      display: inline-block;
+    }
+    .nav {
+      display: flex;
+      gap: 36px;
+      font-size: 1.1rem;
+      font-weight: 500;
+    }
+    .nav a {
+      color: #1e3a8a;
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+    .nav a.active, .nav a:hover {
+      color: #d7263d;
+      font-weight: 700;
+    }
+    .hero {
+      position: relative;
+      width: 100vw;
+      max-width: 100%;
+      min-height: 420px;
+      height: 48vw;
+      background: #e5e7eb;
+      overflow: hidden;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+    }
+    .hero-img {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      object-fit: cover;
+      z-index: 1;
+    }
+    .hero-card {
+      position: relative;
+      z-index: 2;
+      background: #fff;
+      border-radius: 0 0 0 24px;
+      box-shadow: 0 4px 32px rgba(30,58,138,0.10);
+      padding: 40px 48px 32px 48px;
+      margin-bottom: 0;
+      margin-right: 8vw;
+      max-width: 480px;
+      min-width: 320px;
+      border-left: 8px solid #1e3a8a;
+      top: 32px;
+    }
+    .hero-card h1 {
+      font-size: 2.4rem;
+      color: #253858;
+      margin: 0 0 18px 0;
+      font-weight: 700;
+    }
+    .hero-card hr {
+      border: none;
+      border-top: 2px solid #1e3a8a;
+      width: 60px;
+      margin: 18px 0 18px 0;
+    }
+    .hero-card p {
+      font-size: 1.1rem;
+      color: #222;
+      margin: 0;
+      line-height: 1.6;
+    }
+    .social {
+      position: fixed;
+      top: 50%;
+      right: 32px;
+      transform: translateY(-50%);
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      z-index: 10;
+    }
+    .social a {
+      color: #1e3a8a;
+      font-size: 1.3rem;
+      transition: color 0.2s;
+      text-decoration: none;
+    }
+    .social a:hover { color: #d7263d; }
+    @media (max-width: 900px) {
+      .hero-card { margin-right: 2vw; padding: 24px 12px 18px 18px; }
+      .header { flex-direction: column; gap: 12px; }
+    }
+    @media (max-width: 600px) {
+      .hero-card { min-width: 0; max-width: 98vw; padding: 16px 6vw; }
+      .header { padding: 12px 2vw; }
+      .logo { font-size: 1.2rem; padding: 2px 8px; }
+      .nav { gap: 16px; font-size: 0.98rem; }
+      .social { right: 8px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <span class="logo">Strange Capital</span>
+    <nav class="nav">
+      <a href="#" class="active">Home</a>
+      <a href="#">What we do</a>
+      <a href="#">Community</a>
+      <a href="#">Education</a>
+    </nav>
+  </div>
+  <div class="hero">
+    <img src="skyline.jpg" alt="Skyline" class="hero-img" />
+    <div class="hero-card">
+      <h1>We Generate<br>Wealth Together</h1>
+      <hr>
+      <p>We aim to be the best investment firm ever conceived. Our goal is to find the smartest ways to use money so we can make great long-term profits for top public and private organizations.</p>
+    </div>
+  </div>
+  <div class="social">
+    <a href="#"><i class="fab fa-facebook-f"></i></a>
+    <a href="#"><i class="fab fa-twitter"></i></a>
+    <a href="#"><i class="fab fa-linkedin-in"></i></a>
+  </div>
+</body>
+</html> 

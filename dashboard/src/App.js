@@ -41,19 +41,24 @@ function App() {
               timestamp
               status
               notes
-              price_4m
-              price_20m
-              price_1h
+              price_4h
+              price_12h
+              price_1d
               price_next
-              accuracy_4m
-              accuracy_20m
-              accuracy_1h
+              accuracy_4h
+              accuracy_12h
+              accuracy_1d
               accuracy_next
+              mfe
+              mae
+              grade
             }
           }`
         }, {
           headers: { 'Content-Type': 'application/json' }
         });
+        // Debug log: print raw GraphQL response
+        console.log('Raw GraphQL response:', res.data);
         // Map GraphQL fields to dashboard fields
         const mapped = res.data.data.alerts.map(a => ({
           id: a.id,
@@ -61,14 +66,17 @@ function App() {
           action: a.signal,
           initial_price: a.price,
           timestamp: a.timestamp,
-          price_4m: a.price_4m,
-          price_20m: a.price_20m,
-          price_1h: a.price_1h,
+          price_4h: a.price_4h,
+          price_12h: a.price_12h,
+          price_1d: a.price_1d,
           price_next: a.price_next,
-          accuracy_4m: a.accuracy_4m,
-          accuracy_20m: a.accuracy_20m,
-          accuracy_1h: a.accuracy_1h,
+          accuracy_4h: a.accuracy_4h,
+          accuracy_12h: a.accuracy_12h,
+          accuracy_1d: a.accuracy_1d,
           accuracy_next: a.accuracy_next,
+          mfe: a.mfe,
+          mae: a.mae,
+          grade: a.grade,
           notes: a.notes,
         }));
         setAlerts(mapped);
@@ -99,6 +107,38 @@ function App() {
       <div style={{ display: 'flex', marginTop: 40, justifyContent: 'space-around' }}>
         <AccuracyPie alerts={filteredAlerts} />
         <AccuracyBar alerts={filteredAlerts} />
+      </div>
+      <div style={{ 
+        textAlign: 'center', 
+        marginTop: 40, 
+        padding: 20, 
+        backgroundColor: '#f8f9fa', 
+        borderRadius: 8,
+        border: '1px solid #e9ecef'
+      }}>
+        <h2 style={{ color: '#1e3a8a', marginBottom: 16 }}>Want Real-Time Trading Signals?</h2>
+        <p style={{ marginBottom: 20, fontSize: '1.1rem' }}>
+          Get access to our premium trading signals and join our community of successful traders.
+        </p>
+        <a 
+          href="https://www.launchpass.com/strangecapital/subscriber" 
+          target="_blank" 
+          rel="noopener noreferrer"
+          style={{
+            display: 'inline-block',
+            padding: '12px 24px',
+            backgroundColor: '#1e3a8a',
+            color: 'white',
+            textDecoration: 'none',
+            borderRadius: 6,
+            fontWeight: 'bold',
+            transition: 'background-color 0.2s'
+          }}
+          onMouseOver={e => e.target.style.backgroundColor = '#d7263d'}
+          onMouseOut={e => e.target.style.backgroundColor = '#1e3a8a'}
+        >
+          Subscribe to Signals
+        </a>
       </div>
     </div>
   );

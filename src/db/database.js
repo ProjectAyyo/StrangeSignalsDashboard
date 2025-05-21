@@ -75,17 +75,24 @@ class Database {
         fs.mkdirSync(dbDir, { recursive: true });
       }
 
+      // Open the database
       this.db = new sqlite3.Database(this.dbPath);
       this.run = promisify(this.db.run.bind(this.db));
       this.get = promisify(this.db.get.bind(this.db));
       this.all = promisify(this.db.all.bind(this.db));
       
+      // Initialize schema
       await this.initialize();
       console.log(`[DB] Initialized at ${this.dbPath}`);
+      
+      // Mark as initialized before attempting backup
+      this.initialized = true;
       
       // Trigger an immediate backup if in production
       if (this.gcsReady) {
         try {
+          // Wait a short time to ensure database is fully initialized
+          await new Promise(resolve => setTimeout(resolve, 1000));
           console.log('[GCS] Immediate backup (on startup) uploading DB to GCS...');
           await this.uploadDbToGCS();
         } catch (err) {
@@ -93,8 +100,6 @@ class Database {
           // Don't throw here, we want to continue even if backup fails
         }
       }
-      
-      this.initialized = true;
     } catch (err) {
       console.error('[DB] Initialization failed:', err);
       if (this.db) {
@@ -105,6 +110,7 @@ class Database {
         }
         this.db = null;
       }
+      this.initialized = false;
       throw err;
     }
   }
@@ -117,14 +123,44 @@ class Database {
         console.log(`[GCS] Found DB file in bucket ${this.gcsBucket}/${this.gcsFile}`);
         // Create a temporary file for download
         const tempPath = `${this.dbPath}.download`;
+        
+        // Remove any existing temp file
+        if (fs.existsSync(tempPath)) {
+          fs.unlinkSync(tempPath);
+        }
+        
+        // Remove any existing database file
+        if (fs.existsSync(this.dbPath)) {
+          fs.unlinkSync(this.dbPath);
+        }
+        
         await file.download({ destination: tempPath });
-        // Verify the downloaded file
-        if (fs.existsSync(tempPath) && fs.statSync(tempPath).size > 0) {
+        
+        // Verify the downloaded file is a valid SQLite database
+        try {
+          const testDb = new sqlite3.Database(tempPath);
+          await new Promise((resolve, reject) => {
+            testDb.get("SELECT name FROM sqlite_master WHERE type='table' AND name='alerts'", (err, row) => {
+              testDb.close();
+              if (err) {
+                reject(err);
+              } else if (!row) {
+                reject(new Error('Downloaded file is not a valid alerts database'));
+              } else {
+                resolve();
+              }
+            });
+          });
+          
           // Move the temp file to the actual DB path
           fs.renameSync(tempPath, this.dbPath);
           console.log('[GCS] Successfully downloaded and verified DB from GCS');
-        } else {
-          throw new Error('Downloaded file is empty or invalid');
+        } catch (verifyErr) {
+          // Clean up temp file if verification fails
+          if (fs.existsSync(tempPath)) {
+            fs.unlinkSync(tempPath);
+          }
+          throw new Error(`Downloaded file is not a valid SQLite database: ${verifyErr.message}`);
         }
       } else {
         console.log('[GCS] No DB file found in GCS, starting fresh');

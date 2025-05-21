@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@apollo/server": "^4.10.0",
+    "@google-cloud/storage": "^7.16.0",
     "@graphql-tools/schema": "^10.0.2",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",

@@ -2,10 +2,10 @@ import React from 'react';
 import { PieChart, Pie, Tooltip, Cell, Legend } from 'recharts';
 
 export default function AccuracyPie({ alerts }) {
-  // Flatten all accuracy flags
-  const allFlags = alerts.flatMap(a => [
-    a.accuracy_4m, a.accuracy_20m, a.accuracy_1h, a.accuracy_next
-  ]);
+  // Count each alert as accurate if any interval is accurate
+  const allFlags = alerts.map(a =>
+    [a.accuracy_4h, a.accuracy_12h, a.accuracy_1d, a.accuracy_next].some(v => v === 1) ? 1 : 0
+  );
   const total = allFlags.length;
   const correct = allFlags.filter(v => v === 1).length;
   const data = [

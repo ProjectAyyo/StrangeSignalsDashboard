@@ -17,6 +17,22 @@ const resolvers = require('./resolvers/resolvers');
 const app = express();
 const httpServer = createServer(app);
 
+// Serve static files from public (for landing page and assets)
+app.use(express.static(path.join(__dirname, '../public')));
+
+// Serve landing page at /
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, '../public/index.html'));
+});
+
+// Serve dashboard static files
+app.use('/dashboard', express.static(path.join(__dirname, '../dashboard/build')));
+
+// Serve React dashboard for all /dashboard/* routes (for React Router)
+app.get('/dashboard/*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../dashboard/build/index.html'));
+});
+
 // Create schema
 const schema = makeExecutableSchema({ typeDefs, resolvers });
 
@@ -36,109 +52,108 @@ const server = new ApolloServer({
 
 const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
 
+// Helper function to extract signal data from webhook content
+function extractSignalData(content) {
+  let symbol, signal, price, notes;
+  
+  if (typeof content === 'string') {
+    // Try to parse content string format: "SYMBOL Buy/Sell [at price] [- notes]"
+    const match = content.match(/^(\w+)\s+(Buy|Sell)(?:\s+at\s+(\d+(?:\.\d+)?))?\s*(?:-\s*(.+))?$/i);
+    if (match) {
+      [, symbol, signal, price, notes] = match;
+      symbol = symbol.toUpperCase();
+      signal = signal.charAt(0).toUpperCase() + signal.slice(1).toLowerCase();
+      if (price) price = parseFloat(price);
+    }
+  } else if (typeof content === 'object') {
+    // Extract from object format
+    ({ symbol, signal, price, notes } = content);
+    if (symbol) symbol = symbol.toUpperCase();
+    if (signal) signal = signal.charAt(0).toUpperCase() + signal.slice(1).toLowerCase();
+    if (typeof price === 'string') price = parseFloat(price);
+  }
+  
+  return { symbol, signal, price, notes };
+}
+
 // Add this after app and before startServer()
 app.post('/webhook', express.json(), async (req, res) => {
   console.log('=== Webhook Request Received ===');
-  console.log('Headers:', JSON.stringify(req.headers, null, 2));
-  console.log('Body:', JSON.stringify(req.body, null, 2));
-  
+
   try {
-    let { symbol, signal, price, notes, content } = req.body;
-    console.log('Parsed request data:', { symbol, signal, price, notes, content });
-
-    // If symbol/signal are missing but content is present, parse content
-    if ((!symbol || !signal) && content) {
-      console.log('Attempting to parse content:', content);
-      const match = content.match(/^(\w+)\s+(Buy|Sell)$/i);
-      if (match) {
-        symbol = match[1].toUpperCase();
-        signal = match[2].charAt(0).toUpperCase() + match[2].slice(1).toLowerCase();
-        console.log('Parsed from content:', { symbol, signal });
-      }
-    }
-
+    const { content } = req.body;
+    // Extract signal data
+    const { symbol, signal, price, notes } = extractSignalData(content);
     // Validate required fields
-    if (!symbol || !signal) {
-      console.error('Validation failed: Missing required fields', { symbol, signal });
+    if (!symbol || !signal || !price) {
+      console.error('Missing required fields:', { symbol, signal, price });
       return res.status(400).json({ 
-        error: 'Missing required fields: symbol, signal',
+        error: 'Missing required fields',
         received: { symbol, signal, price, notes, content }
       });
     }
-
-    // Handle price
-    if (typeof price !== 'number') {
-      console.log('Price validation:', { 
-        receivedPrice: price, 
-        type: typeof price,
-        hasFinnhubKey: !!FINNHUB_API_KEY 
-      });
-      
-      if (!FINNHUB_API_KEY) {
-        console.error('Price missing and FINNHUB_API_KEY not set');
-        return res.status(400).json({ 
-          error: 'Price missing and FINNHUB_API_KEY not set',
-          received: { symbol, signal, price, notes, content }
-        });
-      }
-
-      try {
-        console.log('Fetching price from Finnhub for symbol:', symbol);
-        price = await fetchFinnhubPrice(symbol);
-        console.log('Finnhub price received:', price);
-      } catch (err) {
-        console.error('Finnhub price fetch error:', err);
-        return res.status(500).json({ 
-          error: 'Failed to fetch price from Finnhub', 
-          details: err.message,
-          received: { symbol, signal, price, notes, content }
-        });
-      }
-    }
-
-    // Create alert
-    console.log('Attempting to create alert with data:', { symbol, signal, price, notes });
+    console.log('Creating alert with data:', { symbol, signal, price, notes });
+    // 1. Store in alerts.db
+    let alert, savedAlert;
     try {
-      const alert = await resolvers.Mutation.createAlert(null, { 
+      alert = await resolvers.Mutation.createAlert(null, { 
         input: { symbol, signal, price, notes } 
       });
       console.log('Alert created successfully:', alert);
-
-      // Forward to Discord
-      if (DISCORD_WEBHOOK_URL) {
-        console.log('Forwarding to Discord webhook:', DISCORD_WEBHOOK_URL);
-        const discordMessage = `${symbol} ${signal} $${price}${notes ? ' - ' + notes : ''}`;
-        console.log('Discord message:', discordMessage);
-        
-        try {
-          const discordResponse = await fetch(DISCORD_WEBHOOK_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ content: discordMessage })
-          });
-          console.log('Discord response status:', discordResponse.status);
-          if (!discordResponse.ok) {
-            console.error('Discord webhook error:', await discordResponse.text());
-          }
-        } catch (discordErr) {
-          console.error('Discord webhook error:', discordErr);
-        }
-      } else {
-        console.log('Discord webhook URL not configured');
+      // Verify alert was saved
+      savedAlert = await resolvers.Query.alert(null, { id: alert.id });
+      if (!savedAlert) {
+        throw new Error('Alert was created but could not be retrieved');
       }
-
-      console.log('Webhook request completed successfully');
-      res.json({ status: 'ok', alert });
-    } catch (alertErr) {
-      console.error('Alert creation error:', alertErr);
-      console.error('Alert creation error stack:', alertErr.stack);
-      res.status(500).json({ 
-        error: 'Failed to create alert', 
-        details: alertErr.message,
-        stack: alertErr.stack,
+      console.log('Alert verified in database:', savedAlert);
+    } catch (dbErr) {
+      console.error('Failed to create or verify alert in DB:', dbErr);
+      return res.status(500).json({ 
+        error: 'Failed to create or verify alert in DB',
+        details: dbErr.message,
+        stack: dbErr.stack,
         received: { symbol, signal, price, notes, content }
       });
     }
+    // 2. Upload alerts.db to GCS
+    try {
+      await db.uploadDbToGCS();
+      console.log('Forced GCS backup after alert creation');
+    } catch (backupErr) {
+      console.error('Failed to force GCS backup:', backupErr);
+      // Do not proceed to Discord or respond with success
+      return res.status(500).json({
+        error: 'Failed to upload DB to GCS after alert creation',
+        details: backupErr.message,
+        stack: backupErr.stack,
+        received: { symbol, signal, price, notes, content }
+      });
+    }
+    // 3. Forward to Discord
+    if (DISCORD_WEBHOOK_URL) {
+      console.log('Forwarding to Discord webhook:', DISCORD_WEBHOOK_URL);
+      const discordMessage = `${symbol} ${signal} $${price}${notes ? ' - ' + notes : ''}`;
+      console.log('Discord message:', discordMessage);
+      try {
+        const discordResponse = await fetch(DISCORD_WEBHOOK_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: discordMessage })
+        });
+        console.log('Discord response status:', discordResponse.status);
+        if (!discordResponse.ok) {
+          console.error('Discord webhook error:', await discordResponse.text());
+        }
+      } catch (discordErr) {
+        console.error('Discord webhook error:', discordErr);
+        // Do not fail the webhook if Discord fails
+      }
+    } else {
+      console.log('Discord webhook URL not configured');
+    }
+    // 4. Respond to webhook
+    console.log('Webhook request completed successfully');
+    res.json({ status: 'ok', alert: savedAlert });
   } catch (err) {
     console.error('Webhook general error:', err);
     console.error('Webhook error stack:', err.stack);
@@ -169,23 +184,6 @@ app.delete('/webhook/:id', async (req, res) => {
   }
 });
 
-app.use(
-  '/dashboard',
-  express.static(path.join(__dirname, '../dashboard/build'))
-);
-
-// Optionally, serve index.html for all /dashboard/* routes (for React Router)
-app.get('/dashboard/*', (req, res) => {
-  res.sendFile(path.join(__dirname, '../dashboard/build/index.html'));
-});
-
-// Serve the landing page at '/'
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, '../public/index.html'));
-});
-
-app.use(express.static(path.join(__dirname, '../public')));
-
 // --- Worker logic for price/accuracy updates ---
 const FINNHUB_API_KEY = process.env.FINNHUB_API_KEY;
 if (!FINNHUB_API_KEY) {
@@ -205,13 +203,15 @@ async function updateAlertPrices(alert, now) {
   const diffMs = now - alertTime;
   const diffMinutes = diffMs / (1000 * 60);
   const intervals = [
-    { key: '4m', minutes: 4 },
-    { key: '20m', minutes: 20 },
-    { key: '1h', minutes: 60 },
-    { key: 'next', minutes: 120 }
+    { key: '4h', minutes: 240 },
+    { key: '12h', minutes: 720 },
+    { key: '1d', minutes: 1440 },
+    { key: 'next', minutes: 2880 } // 2 days as a placeholder for next trading day
   ];
   let update = {};
   let updated = false;
+  // Collect all interval prices for MFE/MAE calculation
+  const pricePoints = [alert.price_4h, alert.price_12h, alert.price_1d, alert.price_next];
   for (const { key, minutes } of intervals) {
     if (diffMinutes >= minutes && alert[`price_${key}`] == null) {
       try {
@@ -220,31 +220,54 @@ async function updateAlertPrices(alert, now) {
         const accuracy = (alert.signal === 'Buy' && price > alert.price) || (alert.signal === 'Sell' && price < alert.price) ? 1 : 0;
         update[`accuracy_${key}`] = accuracy;
         updated = true;
+        pricePoints.push(price);
       } catch (err) {
         console.error(`Error fetching price for alert ${alert.id} (${alert.symbol}) at interval ${key}:`, err);
       }
     }
   }
-  if (updated) {
+  // Calculate MFE/MAE
+  if (pricePoints.length > 0 && alert.price != null) {
+    let mfe = null, mae = null;
+    if (alert.signal === 'Buy') {
+      mfe = Math.max(...pricePoints.filter(p => p != null).map(p => p - alert.price));
+      mae = Math.min(...pricePoints.filter(p => p != null).map(p => p - alert.price));
+    } else if (alert.signal === 'Sell') {
+      mfe = Math.min(...pricePoints.filter(p => p != null).map(p => alert.price - p));
+      mae = Math.max(...pricePoints.filter(p => p != null).map(p => alert.price - p));
+    }
+    update.mfe = mfe;
+    update.mae = mae;
+    // Grading logic
+    let grade = '❌ Failed';
+    if (mfe != null && mfe > 0.01 * alert.price) grade = '✅ Accurate';
+    else if (mfe != null && mfe > 0) grade = '⚠️ Weak';
+    update.grade = grade;
+  }
+  if (updated || update.mfe !== undefined || update.mae !== undefined || update.grade !== undefined) {
     const sql = `
       UPDATE alerts
-      SET price_4m = COALESCE(?, price_4m),
-          price_20m = COALESCE(?, price_20m),
-          price_1h = COALESCE(?, price_1h),
+      SET price_4h = COALESCE(?, price_4h),
+          price_12h = COALESCE(?, price_12h),
+          price_1d = COALESCE(?, price_1d),
           price_next = COALESCE(?, price_next),
-          accuracy_4m = COALESCE(?, accuracy_4m),
-          accuracy_20m = COALESCE(?, accuracy_20m),
-          accuracy_1h = COALESCE(?, accuracy_1h),
-          accuracy_next = COALESCE(?, accuracy_next)
+          accuracy_4h = COALESCE(?, accuracy_4h),
+          accuracy_12h = COALESCE(?, accuracy_12h),
+          accuracy_1d = COALESCE(?, accuracy_1d),
+          accuracy_next = COALESCE(?, accuracy_next),
+          mfe = COALESCE(?, mfe),
+          mae = COALESCE(?, mae),
+          grade = COALESCE(?, grade)
       WHERE id = ?
     `;
     const params = [
-      update.price_4m, update.price_20m, update.price_1h, update.price_next,
-      update.accuracy_4m, update.accuracy_20m, update.accuracy_1h, update.accuracy_next,
+      update.price_4h, update.price_12h, update.price_1d, update.price_next,
+      update.accuracy_4h, update.accuracy_12h, update.accuracy_1d, update.accuracy_next,
+      update.mfe, update.mae, update.grade,
       alert.id
     ];
     await db.runQuery(sql, params);
-    console.log(`Updated alert ${alert.id} (${alert.symbol}) with new prices/accuracy.`);
+    console.log(`Updated alert ${alert.id} (${alert.symbol}) with new prices/accuracy/mfe/mae/grade.`);
   }
 }
 
@@ -318,6 +341,16 @@ app.get('/health', async (req, res) => {
   res.status(statusCode).json(health);
 });
 
+// Debug endpoint to inspect DB path and contents
+app.get('/debug/db', async (req, res) => {
+  try {
+    const alerts = await db.query('SELECT * FROM alerts ORDER BY timestamp DESC');
+    res.json({ dbPath: db.dbPath, alerts });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 async function startServer() {
   await server.start();
 
@@ -335,7 +368,14 @@ async function startServer() {
   });
 }
 
-startServer().catch((err) => {
-  console.error('Error starting server:', err);
-  process.exit(1);
-});
+(async () => {
+  try {
+    console.log('[BOOT] Initializing database (including GCS download)...');
+    await db.init();
+    console.log('[BOOT] Database initialized. Starting server...');
+    await startServer();
+  } catch (err) {
+    console.error('[BOOT] Fatal error during database initialization. Server will not start:', err);
+    process.exit(1);
+  }
+})();

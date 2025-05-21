@@ -8,6 +8,7 @@ RUN yarn install --frozen-lockfile
 
 # Copy server code
 COPY src ./src
+COPY public ./public
 COPY data ./data
 
 # Copy built frontend

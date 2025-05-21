@@ -7,13 +7,16 @@ const pubsub = new PubSub();
 const resolvers = {
   Query: {
     alerts: async () => {
-      return db.query('SELECT * FROM alerts ORDER BY timestamp DESC');
+      console.log('[DEBUG] DB path:', db.dbPath);
+      const result = await db.all('SELECT * FROM alerts ORDER BY timestamp DESC');
+      console.log('[DEBUG] alerts query result:', result);
+      return result;
     },
     alert: async (_, { id }) => {
       return db.getOne('SELECT * FROM alerts WHERE id = ?', [id]);
     },
     alertsBySymbol: async (_, { symbol }) => {
-      return db.query('SELECT * FROM alerts WHERE symbol = ? ORDER BY timestamp DESC', [symbol]);
+      return db.all('SELECT * FROM alerts WHERE symbol = ? ORDER BY timestamp DESC', [symbol]);
     }
   },
 

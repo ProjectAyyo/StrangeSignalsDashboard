@@ -83,14 +83,25 @@ app.post('/webhook', express.json(), async (req, res) => {
   try {
     const { content } = req.body;
     // Extract signal data
-    const { symbol, signal, price, notes } = extractSignalData(content);
-    // Validate required fields
-    if (!symbol || !signal || !price) {
-      // console.error('Missing required fields:', { symbol, signal, price });
+    let { symbol, signal, price, notes } = extractSignalData(content);
+    // Validate required fields (price is now optional)
+    if (!symbol || !signal) {
       return res.status(400).json({ 
         error: 'Missing required fields',
         received: { symbol, signal, price, notes, content }
       });
+    }
+    // If price is not provided, fetch from Finnhub
+    if (price == null) {
+      try {
+        price = await fetchFinnhubPrice(symbol);
+      } catch (fetchErr) {
+        return res.status(500).json({
+          error: 'Failed to fetch price from Finnhub',
+          details: fetchErr.message,
+          received: { symbol, signal, price, notes, content }
+        });
+      }
     }
     // console.log('Creating alert with data:', { symbol, signal, price, notes });
     // 1. Store in alerts.db
@@ -379,3 +390,5 @@ async function startServer() {
     process.exit(1);
   }
 })();
+
+module.exports = { fetchFinnhubPrice };

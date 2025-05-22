@@ -1,6 +1,7 @@
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db/database');
 const { PubSub } = require('graphql-subscriptions');
+const { fetchFinnhubPrice } = require('../server');
 
 const pubsub = new PubSub();
 
@@ -24,16 +25,25 @@ const resolvers = {
     createAlert: async (_, { input }) => {
       const id = uuidv4();
       const timestamp = new Date().toISOString();
+      let price = input.price;
+      if (price == null) {
+        try {
+          price = await fetchFinnhubPrice(input.symbol);
+        } catch (err) {
+          throw new Error('Failed to fetch price from Finnhub: ' + err.message);
+        }
+      }
       const alert = {
         id,
         ...input,
+        price,
         timestamp,
         status: 'active'
       };
 
       await db.runQuery(
         'INSERT INTO alerts (id, symbol, signal, price, timestamp, status, notes) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [id, input.symbol, input.signal, input.price, timestamp, 'active', input.notes]
+        [id, input.symbol, input.signal, price, timestamp, 'active', input.notes]
       );
 
       pubsub.publish('ALERT_CREATED', { alertCreated: alert });

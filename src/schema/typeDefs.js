@@ -25,7 +25,7 @@ const typeDefs = gql`
   input AlertInput {
     symbol: String!
     signal: String!
-    price: Float!
+    price: Float
     notes: String
   }
 

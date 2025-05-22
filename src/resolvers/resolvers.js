@@ -14,10 +14,10 @@ const resolvers = {
       return result;
     },
     alert: async (_, { id }) => {
-      return db.getOne('SELECT * FROM alerts WHERE id = ?', [id]);
+      return db.getOne('SELECT * FROM alerts WHERE id = $1', [id]);
     },
     alertsBySymbol: async (_, { symbol }) => {
-      return db.all('SELECT * FROM alerts WHERE symbol = ? ORDER BY timestamp DESC', [symbol]);
+      return db.all('SELECT * FROM alerts WHERE symbol = $1 ORDER BY timestamp DESC', [symbol]);
     }
   },
 
@@ -42,7 +42,7 @@ const resolvers = {
       };
 
       await db.runQuery(
-        'INSERT INTO alerts (id, symbol, signal, price, timestamp, status, notes) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO alerts (id, symbol, signal, price, timestamp, status, notes) VALUES ($1, $2, $3, $4, $5, $6, $7)',
         [id, input.symbol, input.signal, price, timestamp, 'active', input.notes]
       );
 
@@ -51,10 +51,10 @@ const resolvers = {
     },
 
     updateAlertStatus: async (_, { id, status }) => {
-      const alert = await db.getOne('SELECT * FROM alerts WHERE id = ?', [id]);
+      const alert = await db.getOne('SELECT * FROM alerts WHERE id = $1', [id]);
       if (!alert) throw new Error('Alert not found');
 
-      await db.runQuery('UPDATE alerts SET status = ? WHERE id = ?', [status, id]);
+      await db.runQuery('UPDATE alerts SET status = $1 WHERE id = $2', [status, id]);
       const updatedAlert = { ...alert, status };
       
       pubsub.publish('ALERT_UPDATED', { alertUpdated: updatedAlert });
@@ -62,8 +62,8 @@ const resolvers = {
     },
 
     deleteAlert: async (_, { id }) => {
-      const result = await db.runQuery('DELETE FROM alerts WHERE id = ?', [id]);
-      return result.changes > 0;
+      const result = await db.runQuery('DELETE FROM alerts WHERE id = $1', [id]);
+      return result.rowCount > 0;
     }
   },
 

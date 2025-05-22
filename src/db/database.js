@@ -21,21 +21,7 @@ class Database {
     if (process.env.NODE_ENV === 'production' && this.gcsBucket) {
       this.storage = new Storage();
       this.gcsReady = true;
-      // More frequent backup every 5 minutes
-      setInterval(async () => {
-         if (!this.initialized) {
-           // console.log('[GCS] Skipping periodic backup - database not initialized');
-           return;
-         }
-         try {
-           // console.log('[GCS] Periodic backup: uploading DB to GCS...');
-           await this.uploadDbToGCS();
-         } catch (err) {
-           console.error('[GCS] Periodic backup error:', err);
-           // Attempt to reinitialize on backup failure
-           await this.attemptReinitialize();
-         }
-      }, 5 * 60 * 1000); // 5 minutes
+      // Removed periodic backup. Backups now only occur after signal creation or update.
     }
   }
 
@@ -88,18 +74,7 @@ class Database {
       // Mark as initialized before attempting backup
       this.initialized = true;
       
-      // Trigger an immediate backup if in production
-      if (this.gcsReady) {
-        try {
-          // Wait a short time to ensure database is fully initialized
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          // console.log('[GCS] Immediate backup (on startup) uploading DB to GCS...');
-          await this.uploadDbToGCS();
-        } catch (err) {
-          console.error('[GCS] Immediate backup (on startup) error:', err);
-          // Don't throw here, we want to continue even if backup fails
-        }
-      }
+      // Removed immediate backup on startup. Only backup after signal creation or periodic backup.
     } catch (err) {
       console.error('[DB] Initialization failed:', err);
       if (this.db) {

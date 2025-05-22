@@ -78,7 +78,7 @@ function extractSignalData(content) {
 
 // Add this after app and before startServer()
 app.post('/webhook', express.json(), async (req, res) => {
-  console.log('=== Webhook Request Received ===');
+  // console.log('=== Webhook Request Received ===');
 
   try {
     const { content } = req.body;
@@ -86,28 +86,28 @@ app.post('/webhook', express.json(), async (req, res) => {
     const { symbol, signal, price, notes } = extractSignalData(content);
     // Validate required fields
     if (!symbol || !signal || !price) {
-      console.error('Missing required fields:', { symbol, signal, price });
+      // console.error('Missing required fields:', { symbol, signal, price });
       return res.status(400).json({ 
         error: 'Missing required fields',
         received: { symbol, signal, price, notes, content }
       });
     }
-    console.log('Creating alert with data:', { symbol, signal, price, notes });
+    // console.log('Creating alert with data:', { symbol, signal, price, notes });
     // 1. Store in alerts.db
     let alert, savedAlert;
     try {
       alert = await resolvers.Mutation.createAlert(null, { 
         input: { symbol, signal, price, notes } 
       });
-      console.log('Alert created successfully:', alert);
+      // console.log('Alert created successfully:', alert);
       // Verify alert was saved
       savedAlert = await resolvers.Query.alert(null, { id: alert.id });
       if (!savedAlert) {
         throw new Error('Alert was created but could not be retrieved');
       }
-      console.log('Alert verified in database:', savedAlert);
+      // console.log('Alert verified in database:', savedAlert);
     } catch (dbErr) {
-      console.error('Failed to create or verify alert in DB:', dbErr);
+      // console.error('Failed to create or verify alert in DB:', dbErr);
       return res.status(500).json({ 
         error: 'Failed to create or verify alert in DB',
         details: dbErr.message,
@@ -118,9 +118,9 @@ app.post('/webhook', express.json(), async (req, res) => {
     // 2. Upload alerts.db to GCS
     try {
       await db.uploadDbToGCS();
-      console.log('Forced GCS backup after alert creation');
+      // console.log('Forced GCS backup after alert creation');
     } catch (backupErr) {
-      console.error('Failed to force GCS backup:', backupErr);
+      // console.error('Failed to force GCS backup:', backupErr);
       // Do not proceed to Discord or respond with success
       return res.status(500).json({
         error: 'Failed to upload DB to GCS after alert creation',
@@ -131,32 +131,32 @@ app.post('/webhook', express.json(), async (req, res) => {
     }
     // 3. Forward to Discord
     if (DISCORD_WEBHOOK_URL) {
-      console.log('Forwarding to Discord webhook:', DISCORD_WEBHOOK_URL);
+      // console.log('Forwarding to Discord webhook:', DISCORD_WEBHOOK_URL);
       const discordMessage = `${symbol} ${signal} $${price}${notes ? ' - ' + notes : ''}`;
-      console.log('Discord message:', discordMessage);
+      // console.log('Discord message:', discordMessage);
       try {
         const discordResponse = await fetch(DISCORD_WEBHOOK_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ content: discordMessage })
         });
-        console.log('Discord response status:', discordResponse.status);
+        // console.log('Discord response status:', discordResponse.status);
         if (!discordResponse.ok) {
-          console.error('Discord webhook error:', await discordResponse.text());
+          // console.error('Discord webhook error:', await discordResponse.text());
         }
       } catch (discordErr) {
-        console.error('Discord webhook error:', discordErr);
+        // console.error('Discord webhook error:', discordErr);
         // Do not fail the webhook if Discord fails
       }
     } else {
-      console.log('Discord webhook URL not configured');
+      // console.log('Discord webhook URL not configured');
     }
     // 4. Respond to webhook
-    console.log('Webhook request completed successfully');
+    // console.log('Webhook request completed successfully');
     res.json({ status: 'ok', alert: savedAlert });
   } catch (err) {
-    console.error('Webhook general error:', err);
-    console.error('Webhook error stack:', err.stack);
+    // console.error('Webhook general error:', err);
+    // console.error('Webhook error stack:', err.stack);
     res.status(500).json({ 
       error: 'Internal server error', 
       details: err.message,
@@ -167,16 +167,16 @@ app.post('/webhook', express.json(), async (req, res) => {
 });
 
 app.delete('/webhook/:id', async (req, res) => {
-  console.log('=== Delete Alert Request ===');
-  console.log('Alert ID:', req.params.id);
+  // console.log('=== Delete Alert Request ===');
+  // console.log('Alert ID:', req.params.id);
   
   try {
     const sql = 'DELETE FROM alerts WHERE id = ?';
     await db.runQuery(sql, [req.params.id]);
-    console.log('Alert deleted successfully');
+    // console.log('Alert deleted successfully');
     res.json({ status: 'ok', message: 'Alert deleted' });
   } catch (err) {
-    console.error('Delete alert error:', err);
+    // console.error('Delete alert error:', err);
     res.status(500).json({ 
       error: 'Failed to delete alert', 
       details: err.message 
@@ -187,7 +187,7 @@ app.delete('/webhook/:id', async (req, res) => {
 // --- Worker logic for price/accuracy updates ---
 const FINNHUB_API_KEY = process.env.FINNHUB_API_KEY;
 if (!FINNHUB_API_KEY) {
-  console.error('FINNHUB_API_KEY not set in .env. Price/accuracy worker will not run.');
+  // console.error('FINNHUB_API_KEY not set in .env. Price/accuracy worker will not run.');
 }
 
 async function fetchFinnhubPrice(symbol) {
@@ -222,7 +222,7 @@ async function updateAlertPrices(alert, now) {
         updated = true;
         pricePoints.push(price);
       } catch (err) {
-        console.error(`Error fetching price for alert ${alert.id} (${alert.symbol}) at interval ${key}:`, err);
+        // console.error(`Error fetching price for alert ${alert.id} (${alert.symbol}) at interval ${key}:`, err);
       }
     }
   }
@@ -273,7 +273,7 @@ async function updateAlertPrices(alert, now) {
 
 async function runWorker() {
   if (!FINNHUB_API_KEY) return;
-  console.log('Worker running at', new Date().toISOString());
+  // console.log('Worker running at', new Date().toISOString());
   const now = new Date();
   const sql = "SELECT * FROM alerts WHERE status = 'active' AND datetime(timestamp) >= datetime('now', '-2 hours')";
   const alerts = await db.query(sql);
@@ -363,19 +363,19 @@ async function startServer() {
 
   const PORT = process.env.PORT || 8080;
   httpServer.listen(PORT, () => {
-    console.log(`🚀 Server ready at http://localhost:${PORT}/graphql`);
-    console.log(`🚀 Subscriptions ready at ws://localhost:${PORT}/graphql`);
+    // console.log(`🚀 Server ready at http://localhost:${PORT}/graphql`);
+    // console.log(`🚀 Subscriptions ready at ws://localhost:${PORT}/graphql`);
   });
 }
 
 (async () => {
   try {
-    console.log('[BOOT] Initializing database (including GCS download)...');
+    // console.log('[BOOT] Initializing database (including GCS download)...');
     await db.init();
-    console.log('[BOOT] Database initialized. Starting server...');
+    // console.log('[BOOT] Database initialized. Starting server...');
     await startServer();
   } catch (err) {
-    console.error('[BOOT] Fatal error during database initialization. Server will not start:', err);
+    // console.error('[BOOT] Fatal error during database initialization. Server will not start:', err);
     process.exit(1);
   }
 })();

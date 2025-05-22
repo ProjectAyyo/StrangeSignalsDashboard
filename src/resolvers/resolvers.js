@@ -7,9 +7,9 @@ const pubsub = new PubSub();
 const resolvers = {
   Query: {
     alerts: async () => {
-      console.log('[DEBUG] DB path:', db.dbPath);
+      // console.log('[DEBUG] DB path:', db.dbPath);
       const result = await db.all('SELECT * FROM alerts ORDER BY timestamp DESC');
-      console.log('[DEBUG] alerts query result:', result);
+      // console.log('[DEBUG] alerts query result:', result);
       return result;
     },
     alert: async (_, { id }) => {

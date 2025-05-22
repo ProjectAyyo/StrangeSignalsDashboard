@@ -24,11 +24,11 @@ class Database {
       // More frequent backup every 5 minutes
       setInterval(async () => {
          if (!this.initialized) {
-           console.log('[GCS] Skipping periodic backup - database not initialized');
+           // console.log('[GCS] Skipping periodic backup - database not initialized');
            return;
          }
          try {
-           console.log('[GCS] Periodic backup: uploading DB to GCS...');
+           // console.log('[GCS] Periodic backup: uploading DB to GCS...');
            await this.uploadDbToGCS();
          } catch (err) {
            console.error('[GCS] Periodic backup error:', err);
@@ -45,7 +45,7 @@ class Database {
       return;
     }
     this.initRetries++;
-    console.log(`[DB] Attempting reinitialization (attempt ${this.initRetries}/${this.maxRetries})...`);
+    // console.log(`[DB] Attempting reinitialization (attempt ${this.initRetries}/${this.maxRetries})...`);
     try {
       await this.init();
       this.initRetries = 0; // Reset retry counter on success
@@ -58,14 +58,14 @@ class Database {
 
   async init() {
     if (this.initialized) {
-      console.log('[DB] Already initialized, skipping');
+      // console.log('[DB] Already initialized, skipping');
       return;
     }
 
     try {
       // Download DB from GCS if in production and bucket is set
       if (this.gcsReady) {
-        console.log('[GCS] Attempting to download DB from GCS...');
+        // console.log('[GCS] Attempting to download DB from GCS...');
         await this.downloadDbFromGCS();
       }
 
@@ -83,7 +83,7 @@ class Database {
       
       // Initialize schema
       await this.initialize();
-      console.log(`[DB] Initialized at ${this.dbPath}`);
+      // console.log(`[DB] Initialized at ${this.dbPath}`);
       
       // Mark as initialized before attempting backup
       this.initialized = true;
@@ -93,7 +93,7 @@ class Database {
         try {
           // Wait a short time to ensure database is fully initialized
           await new Promise(resolve => setTimeout(resolve, 1000));
-          console.log('[GCS] Immediate backup (on startup) uploading DB to GCS...');
+          // console.log('[GCS] Immediate backup (on startup) uploading DB to GCS...');
           await this.uploadDbToGCS();
         } catch (err) {
           console.error('[GCS] Immediate backup (on startup) error:', err);
@@ -120,7 +120,7 @@ class Database {
       const file = this.storage.bucket(this.gcsBucket).file(this.gcsFile);
       const exists = (await file.exists())[0];
       if (exists) {
-        console.log(`[GCS] Found DB file in bucket ${this.gcsBucket}/${this.gcsFile}`);
+        // console.log(`[GCS] Found DB file in bucket ${this.gcsBucket}/${this.gcsFile}`);
         // Create a temporary file for download
         const tempPath = `${this.dbPath}.download`;
         
@@ -154,7 +154,7 @@ class Database {
           
           // Move the temp file to the actual DB path
           fs.renameSync(tempPath, this.dbPath);
-          console.log('[GCS] Successfully downloaded and verified DB from GCS');
+          // console.log('[GCS] Successfully downloaded and verified DB from GCS');
         } catch (verifyErr) {
           // Clean up temp file if verification fails
           if (fs.existsSync(tempPath)) {
@@ -163,7 +163,7 @@ class Database {
           throw new Error(`Downloaded file is not a valid SQLite database: ${verifyErr.message}`);
         }
       } else {
-        console.log('[GCS] No DB file found in GCS, starting fresh');
+        // console.log('[GCS] No DB file found in GCS, starting fresh');
       }
     } catch (err) {
       console.error('[GCS] Error downloading DB from GCS:', err);
@@ -181,7 +181,7 @@ class Database {
         const tempPath = `${this.dbPath}.upload`;
         fs.copyFileSync(this.dbPath, tempPath);
         
-        console.log(`[GCS] Starting upload to ${this.gcsBucket}/${this.gcsFile}`);
+        // console.log(`[GCS] Starting upload to ${this.gcsBucket}/${this.gcsFile}`);
         await this.storage.bucket(this.gcsBucket).upload(tempPath, { 
           destination: this.gcsFile,
           metadata: {
@@ -191,7 +191,7 @@ class Database {
         });
         // Clean up temp file
         fs.unlinkSync(tempPath);
-        console.log('[GCS] Successfully uploaded DB to GCS');
+        // console.log('[GCS] Successfully uploaded DB to GCS');
       } else {
         console.error('[GCS] DB file not found for upload:', this.dbPath);
         throw new Error('Database file not found');
@@ -249,7 +249,7 @@ class Database {
 
   async close() {
     if (!this.initialized) {
-      console.log('[DB] Not initialized, nothing to close');
+      // console.log('[DB] Not initialized, nothing to close');
       return;
     }
     return new Promise((resolve, reject) => {

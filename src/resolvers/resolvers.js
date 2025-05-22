@@ -9,7 +9,7 @@ const resolvers = {
   Query: {
     alerts: async () => {
       // console.log('[DEBUG] DB path:', db.dbPath);
-      const result = await db.all('SELECT * FROM alerts ORDER BY timestamp DESC');
+      const result = await db.query('SELECT * FROM alerts ORDER BY timestamp DESC');
       // console.log('[DEBUG] alerts query result:', result);
       return result;
     },
@@ -17,7 +17,7 @@ const resolvers = {
       return db.getOne('SELECT * FROM alerts WHERE id = $1', [id]);
     },
     alertsBySymbol: async (_, { symbol }) => {
-      return db.all('SELECT * FROM alerts WHERE symbol = $1 ORDER BY timestamp DESC', [symbol]);
+      return db.query('SELECT * FROM alerts WHERE symbol = $1 ORDER BY timestamp DESC', [symbol]);
     }
   },
 

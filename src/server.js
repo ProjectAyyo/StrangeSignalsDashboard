@@ -126,20 +126,6 @@ app.post('/webhook', express.json(), async (req, res) => {
         received: { symbol, signal, price, notes, content }
       });
     }
-    // 2. Upload alerts.db to GCS
-    try {
-      await db.uploadDbToGCS();
-      // console.log('Forced GCS backup after alert creation');
-    } catch (backupErr) {
-      // console.error('Failed to force GCS backup:', backupErr);
-      // Do not proceed to Discord or respond with success
-      return res.status(500).json({
-        error: 'Failed to upload DB to GCS after alert creation',
-        details: backupErr.message,
-        stack: backupErr.stack,
-        received: { symbol, signal, price, notes, content }
-      });
-    }
     // 3. Forward to Discord
     if (DISCORD_WEBHOOK_URL) {
       // console.log('Forwarding to Discord webhook:', DISCORD_WEBHOOK_URL);

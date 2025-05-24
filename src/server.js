@@ -10,6 +10,7 @@ const { makeExecutableSchema } = require('@graphql-tools/schema');
 const fetch = require('node-fetch');
 const path = require('path');
 const db = require('./db/database');
+const { fetchFinnhubPrice } = require('./utils/finnhub');
 
 const typeDefs = require('./schema/typeDefs');
 const resolvers = require('./resolvers/resolvers');
@@ -187,39 +188,54 @@ if (!FINNHUB_API_KEY) {
   // console.error('FINNHUB_API_KEY not set in .env. Price/accuracy worker will not run.');
 }
 
-async function fetchFinnhubPrice(symbol) {
-  const url = `https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${FINNHUB_API_KEY}`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Finnhub API error: ${res.statusText}`);
-  const data = await res.json();
-  return data.c; // current price
+function isMarketOpen(now) {
+  const day = now.getDay(); // 0 = Sunday, 6 = Saturday
+  const hour = now.getHours();
+  const minute = now.getMinutes();
+  // Market open: Mon-Fri, 9:30am to 5:00pm
+  if (day === 0 || day === 6) return false;
+  if (hour < 9 || (hour === 9 && minute < 30)) return false;
+  if (hour > 17 || (hour === 17 && minute > 0)) return false;
+  return true;
+}
+
+function getNextTradingDay930(alertTime) {
+  // Find the next weekday after alertTime, set to 9:30am
+  let next = new Date(alertTime);
+  next.setDate(next.getDate() + 1);
+  next.setHours(9, 30, 0, 0);
+  while (next.getDay() === 0 || next.getDay() === 6) {
+    next.setDate(next.getDate() + 1);
+  }
+  return next;
 }
 
 async function updateAlertPrices(alert, now) {
   const alertTime = new Date(alert.timestamp);
   const diffMs = now - alertTime;
   const diffMinutes = diffMs / (1000 * 60);
+  const next930 = getNextTradingDay930(alertTime);
   const intervals = [
-    { key: '4h', minutes: 240 },
-    { key: '12h', minutes: 720 },
-    { key: '1d', minutes: 1440 },
-    { key: 'next', minutes: 2880 } // 2 days as a placeholder for next trading day
+    { key: '1h',   ready: diffMinutes >= 60 && alert.price_1h == null },
+    { key: '4h',   ready: diffMinutes >= 240 && alert.price_4h == null },
+    { key: '1d',   ready: diffMinutes >= 1440 && alert.price_1d == null },
+    { key: 'next', ready: now >= next930 && alert.price_next == null }
   ];
   let update = {};
   let updated = false;
-  // Collect all interval prices for MFE/MAE calculation
-  const pricePoints = [alert.price_4h, alert.price_12h, alert.price_1d, alert.price_next];
-  for (const { key, minutes } of intervals) {
-    if (diffMinutes >= minutes && alert[`price_${key}`] == null) {
+  const pricePoints = [alert.price_1h, alert.price_4h, alert.price_1d, alert.price_next];
+  for (const { key, ready } of intervals) {
+    if (ready) {
       try {
         const price = await fetchFinnhubPrice(alert.symbol);
+        console.log(`[updateAlertPrices] Alert ID: ${alert.id}, Symbol: ${alert.symbol}, Interval: ${key}, Price: ${price}, Init Price: ${alert.price}`);
         update[`price_${key}`] = price;
         const accuracy = (alert.signal === 'Buy' && price > alert.price) || (alert.signal === 'Sell' && price < alert.price) ? 1 : 0;
         update[`accuracy_${key}`] = accuracy;
         updated = true;
         pricePoints.push(price);
       } catch (err) {
-        // console.error(`Error fetching price for alert ${alert.id} (${alert.symbol}) at interval ${key}:`, err);
+        console.error(`[updateAlertPrices] Error updating alert ${alert.id} (${alert.symbol}) at interval ${key}:`, err);
       }
     }
   }
@@ -244,12 +260,12 @@ async function updateAlertPrices(alert, now) {
   if (updated || update.mfe !== undefined || update.mae !== undefined || update.grade !== undefined) {
     const sql = `
       UPDATE alerts
-      SET price_4h = COALESCE(?, price_4h),
-          price_12h = COALESCE(?, price_12h),
+      SET price_1h = COALESCE(?, price_1h),
+          price_4h = COALESCE(?, price_4h),
           price_1d = COALESCE(?, price_1d),
           price_next = COALESCE(?, price_next),
+          accuracy_1h = COALESCE(?, accuracy_1h),
           accuracy_4h = COALESCE(?, accuracy_4h),
-          accuracy_12h = COALESCE(?, accuracy_12h),
           accuracy_1d = COALESCE(?, accuracy_1d),
           accuracy_next = COALESCE(?, accuracy_next),
           mfe = COALESCE(?, mfe),
@@ -258,8 +274,8 @@ async function updateAlertPrices(alert, now) {
       WHERE id = ?
     `;
     const params = [
-      update.price_4h, update.price_12h, update.price_1d, update.price_next,
-      update.accuracy_4h, update.accuracy_12h, update.accuracy_1d, update.accuracy_next,
+      update.price_1h, update.price_4h, update.price_1d, update.price_next,
+      update.accuracy_1h, update.accuracy_4h, update.accuracy_1d, update.accuracy_next,
       update.mfe, update.mae, update.grade,
       alert.id
     ];
@@ -270,16 +286,16 @@ async function updateAlertPrices(alert, now) {
 
 async function runWorker() {
   if (!FINNHUB_API_KEY) return;
-  // console.log('Worker running at', new Date().toISOString());
   const now = new Date();
-  const sql = "SELECT * FROM alerts WHERE status = 'active' AND datetime(timestamp) >= datetime('now', '-2 hours')";
+  if (!isMarketOpen(now)) return;
+  const sql = "SELECT * FROM alerts WHERE status = 'active'";
   const alerts = await db.query(sql);
   for (const alert of alerts) {
     await updateAlertPrices(alert, now);
   }
 }
 
-setInterval(runWorker, 60 * 1000);
+setInterval(runWorker, 5 * 60 * 1000);
 runWorker().catch(err => { console.error('Worker error:', err); });
 // --- End worker logic ---
 
@@ -376,5 +392,3 @@ async function startServer() {
     process.exit(1);
   }
 })();
-
-module.exports = { fetchFinnhubPrice };

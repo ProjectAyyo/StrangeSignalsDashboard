@@ -18,13 +18,13 @@ class Database {
     if (this.initialized) return;
     // Ensure the alerts table exists (idempotent)
     await this.pool.query(`
-      CREATE TABLE IF NOT EXISTS alerts (
-        id TEXT PRIMARY KEY,
-        symbol TEXT NOT NULL,
-        signal TEXT NOT NULL,
-        price REAL NOT NULL,
-        timestamp TEXT NOT NULL,
-        status TEXT NOT NULL DEFAULT 'active',
+          CREATE TABLE IF NOT EXISTS alerts (
+            id TEXT PRIMARY KEY,
+            symbol TEXT NOT NULL,
+            signal TEXT NOT NULL,
+            price REAL NOT NULL,
+            timestamp TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'active',
         notes TEXT,
         price_4h REAL,
         price_12h REAL,
@@ -59,7 +59,7 @@ class Database {
 
   async close() {
     await this.pool.end();
-    this.initialized = false;
+          this.initialized = false;
   }
 }
 

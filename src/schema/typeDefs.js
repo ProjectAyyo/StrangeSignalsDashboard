@@ -20,6 +20,8 @@ const typeDefs = gql`
     mfe: Float
     mae: Float
     grade: String
+    price_1h: Float
+    accuracy_1h: Int
   }
 
   input AlertInput {

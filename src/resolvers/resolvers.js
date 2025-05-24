@@ -1,7 +1,7 @@
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db/database');
 const { PubSub } = require('graphql-subscriptions');
-const { fetchFinnhubPrice } = require('../server');
+const { fetchFinnhubPrice } = require('../utils/finnhub');
 
 const pubsub = new PubSub();
 

@@ -1,10 +1,13 @@
 import React from 'react';
 
 const intervals = [
+  { key: '5m', label: 'Δ@5m' },
   { key: '1h', label: 'Δ@1h' },
   { key: '4h', label: 'Δ@4h' },
-  { key: '1d', label: 'Δ@1d' },
-  { key: 'next', label: 'Δ@next' }
+  { key: 'next', label: 'Δ@next' },
+  { key: 'next_4h', label: 'Δ@next+4h' },
+  { key: '2d', label: 'Δ@2d' },
+  { key: '1w', label: 'Δ@1w' }
 ];
 
 const fmtDiff = (price, initial) => {

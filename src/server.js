@@ -216,10 +216,13 @@ async function updateAlertPrices(alert, now) {
   const diffMinutes = diffMs / (1000 * 60);
   const next930 = getNextTradingDay930(alertTime);
   const intervals = [
+    { key: '5m',   ready: diffMinutes >= 5 && alert.price_5m == null },
     { key: '1h',   ready: diffMinutes >= 60 && alert.price_1h == null },
     { key: '4h',   ready: diffMinutes >= 240 && alert.price_4h == null },
-    { key: '1d',   ready: diffMinutes >= 1440 && alert.price_1d == null },
-    { key: 'next', ready: now >= next930 && alert.price_next == null }
+    { key: 'next', ready: now >= next930 && alert.price_next == null },
+    { key: 'next_4h', ready: now >= next930 + 4 * 60 * 60 * 1000 && alert.price_next_4h == null },
+    { key: '2d',   ready: diffMinutes >= 2 * 1440 && alert.price_2d == null },
+    { key: '1w',   ready: diffMinutes >= 7 * 1440 && alert.price_1w == null }
   ];
   let update = {};
   let updated = false;
@@ -258,29 +261,32 @@ async function updateAlertPrices(alert, now) {
     update.grade = grade;
   }
   if (updated || update.mfe !== undefined || update.mae !== undefined || update.grade !== undefined) {
-    const sql = `
-      UPDATE alerts
-      SET price_1h = COALESCE(?, price_1h),
-          price_4h = COALESCE(?, price_4h),
-          price_1d = COALESCE(?, price_1d),
-          price_next = COALESCE(?, price_next),
-          accuracy_1h = COALESCE(?, accuracy_1h),
-          accuracy_4h = COALESCE(?, accuracy_4h),
-          accuracy_1d = COALESCE(?, accuracy_1d),
-          accuracy_next = COALESCE(?, accuracy_next),
-          mfe = COALESCE(?, mfe),
-          mae = COALESCE(?, mae),
-          grade = COALESCE(?, grade)
-      WHERE id = ?
-    `;
-    const params = [
-      update.price_1h, update.price_4h, update.price_1d, update.price_next,
-      update.accuracy_1h, update.accuracy_4h, update.accuracy_1d, update.accuracy_next,
-      update.mfe, update.mae, update.grade,
-      alert.id
-    ];
-    await db.runQuery(sql, params);
-    console.log(`Updated alert ${alert.id} (${alert.symbol}) with new prices/accuracy/mfe/mae/grade.`);
+    // Build dynamic SQL for only the fields that are being updated
+    const fields = [];
+    const params = [];
+    if (update.price_5m !== undefined) { fields.push('price_5m = $' + (params.length + 1)); params.push(update.price_5m); }
+    if (update.price_1h !== undefined) { fields.push('price_1h = $' + (params.length + 1)); params.push(update.price_1h); }
+    if (update.price_4h !== undefined) { fields.push('price_4h = $' + (params.length + 1)); params.push(update.price_4h); }
+    if (update.price_next !== undefined) { fields.push('price_next = $' + (params.length + 1)); params.push(update.price_next); }
+    if (update.price_next_4h !== undefined) { fields.push('price_next_4h = $' + (params.length + 1)); params.push(update.price_next_4h); }
+    if (update.price_2d !== undefined) { fields.push('price_2d = $' + (params.length + 1)); params.push(update.price_2d); }
+    if (update.price_1w !== undefined) { fields.push('price_1w = $' + (params.length + 1)); params.push(update.price_1w); }
+    if (update.accuracy_5m !== undefined) { fields.push('accuracy_5m = $' + (params.length + 1)); params.push(update.accuracy_5m); }
+    if (update.accuracy_1h !== undefined) { fields.push('accuracy_1h = $' + (params.length + 1)); params.push(update.accuracy_1h); }
+    if (update.accuracy_4h !== undefined) { fields.push('accuracy_4h = $' + (params.length + 1)); params.push(update.accuracy_4h); }
+    if (update.accuracy_next !== undefined) { fields.push('accuracy_next = $' + (params.length + 1)); params.push(update.accuracy_next); }
+    if (update.accuracy_next_4h !== undefined) { fields.push('accuracy_next_4h = $' + (params.length + 1)); params.push(update.accuracy_next_4h); }
+    if (update.accuracy_2d !== undefined) { fields.push('accuracy_2d = $' + (params.length + 1)); params.push(update.accuracy_2d); }
+    if (update.accuracy_1w !== undefined) { fields.push('accuracy_1w = $' + (params.length + 1)); params.push(update.accuracy_1w); }
+    if (update.mfe !== undefined) { fields.push('mfe = $' + (params.length + 1)); params.push(update.mfe); }
+    if (update.mae !== undefined) { fields.push('mae = $' + (params.length + 1)); params.push(update.mae); }
+    if (update.grade !== undefined) { fields.push('grade = $' + (params.length + 1)); params.push(update.grade); }
+    if (fields.length > 0) {
+      const sql = `UPDATE alerts SET ${fields.join(', ')} WHERE id = $${params.length + 1}`;
+      params.push(alert.id);
+      await db.runQuery(sql, params);
+      console.log(`Updated alert ${alert.id} (${alert.symbol}) with new prices/accuracy/mfe/mae/grade.`);
+    }
   }
 }
 

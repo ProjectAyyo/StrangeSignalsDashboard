@@ -41,14 +41,20 @@ function App() {
               timestamp
               status
               notes
+              price_5m
               price_1h
               price_4h
-              price_1d
               price_next
+              price_next_4h
+              price_2d
+              price_1w
+              accuracy_5m
               accuracy_1h
               accuracy_4h
-              accuracy_1d
               accuracy_next
+              accuracy_next_4h
+              accuracy_2d
+              accuracy_1w
               mfe
               mae
               grade
@@ -66,14 +72,20 @@ function App() {
           action: a.signal,
           initial_price: a.price,
           timestamp: a.timestamp,
+          price_5m: a.price_5m,
           price_1h: a.price_1h,
           price_4h: a.price_4h,
-          price_1d: a.price_1d,
           price_next: a.price_next,
+          price_next_4h: a.price_next_4h,
+          price_2d: a.price_2d,
+          price_1w: a.price_1w,
+          accuracy_5m: a.accuracy_5m,
           accuracy_1h: a.accuracy_1h,
           accuracy_4h: a.accuracy_4h,
-          accuracy_1d: a.accuracy_1d,
           accuracy_next: a.accuracy_next,
+          accuracy_next_4h: a.accuracy_next_4h,
+          accuracy_2d: a.accuracy_2d,
+          accuracy_1w: a.accuracy_1w,
           mfe: a.mfe,
           mae: a.mae,
           grade: a.grade,

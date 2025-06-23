@@ -11,6 +11,10 @@ const fetch = require('node-fetch');
 const path = require('path');
 const db = require('./db/database');
 const { fetchFinnhubPrice } = require('./utils/finnhub');
+const AlertScheduler = require('./utils/scheduler');
+const { migrateExistingAlerts } = require('./utils/migrateExistingAlerts');
+const BatchProcessor = require('./utils/batchProcessor');
+const cache = require('./utils/cache');
 
 const typeDefs = require('./schema/typeDefs');
 const resolvers = require('./resolvers/resolvers');
@@ -41,6 +45,28 @@ const schema = makeExecutableSchema({ typeDefs, resolvers });
 const wsServer = new WebSocketServer({
   server: httpServer,
   path: '/graphql',
+});
+
+// Add WebSocket debugging
+wsServer.on('connection', (socket, request) => {
+  console.log('[WebSocket] New connection established');
+  
+  socket.on('message', (message) => {
+    try {
+      const data = JSON.parse(message.toString());
+      console.log('[WebSocket] Received message:', data);
+    } catch (err) {
+      console.log('[WebSocket] Received non-JSON message:', message.toString());
+    }
+  });
+  
+  socket.on('close', (code, reason) => {
+    console.log('[WebSocket] Connection closed:', { code, reason: reason.toString() });
+  });
+  
+  socket.on('error', (error) => {
+    console.error('[WebSocket] Error:', error);
+  });
 });
 
 // Set up WebSocket server
@@ -106,22 +132,16 @@ app.post('/webhook', express.json(), async (req, res) => {
     }
     // console.log('Creating alert with data:', { symbol, signal, price, notes });
     // 1. Store in alerts.db
-    let alert, savedAlert;
+    let alert;
     try {
       alert = await resolvers.Mutation.createAlert(null, { 
         input: { symbol, signal, price, notes } 
       });
       // console.log('Alert created successfully:', alert);
-      // Verify alert was saved
-      savedAlert = await resolvers.Query.alert(null, { id: alert.id });
-      if (!savedAlert) {
-        throw new Error('Alert was created but could not be retrieved');
-      }
-      // console.log('Alert verified in database:', savedAlert);
     } catch (dbErr) {
-      // console.error('Failed to create or verify alert in DB:', dbErr);
+      // console.error('Failed to create alert in DB:', dbErr);
       return res.status(500).json({ 
-        error: 'Failed to create or verify alert in DB',
+        error: 'Failed to create alert in DB',
         details: dbErr.message,
         stack: dbErr.stack,
         received: { symbol, signal, price, notes, content }
@@ -151,7 +171,7 @@ app.post('/webhook', express.json(), async (req, res) => {
     }
     // 4. Respond to webhook
     // console.log('Webhook request completed successfully');
-    res.json({ status: 'ok', alert: savedAlert });
+    res.json({ status: 'ok', alert: alert });
   } catch (err) {
     // console.error('Webhook general error:', err);
     // console.error('Webhook error stack:', err.stack);
@@ -188,125 +208,43 @@ if (!FINNHUB_API_KEY) {
   // console.error('FINNHUB_API_KEY not set in .env. Price/accuracy worker will not run.');
 }
 
-function isMarketOpen(now) {
-  const day = now.getDay(); // 0 = Sunday, 6 = Saturday
-  const hour = now.getHours();
-  const minute = now.getMinutes();
-  // Market open: Mon-Fri, 9:30am to 5:00pm
-  if (day === 0 || day === 6) return false;
-  if (hour < 9 || (hour === 9 && minute < 30)) return false;
-  if (hour > 17 || (hour === 17 && minute > 0)) return false;
-  return true;
-}
-
-function getNextTradingDay930(alertTime) {
-  // Find the next weekday after alertTime, set to 9:30am
-  let next = new Date(alertTime);
-  next.setDate(next.getDate() + 1);
-  next.setHours(9, 30, 0, 0);
-  while (next.getDay() === 0 || next.getDay() === 6) {
-    next.setDate(next.getDate() + 1);
-  }
-  return next;
-}
-
-async function updateAlertPrices(alert, now) {
-  const alertTime = new Date(alert.timestamp);
-  const diffMs = now - alertTime;
-  const diffMinutes = diffMs / (1000 * 60);
-  const next930 = getNextTradingDay930(alertTime);
-  const intervals = [
-    { key: '5m',   ready: diffMinutes >= 5 && alert.price_5m == null },
-    { key: '1h',   ready: diffMinutes >= 60 && alert.price_1h == null },
-    { key: '4h',   ready: diffMinutes >= 240 && alert.price_4h == null },
-    { key: 'next', ready: now >= next930 && alert.price_next == null },
-    { key: 'next_4h', ready: now >= next930 + 4 * 60 * 60 * 1000 && alert.price_next_4h == null },
-    { key: '2d',   ready: diffMinutes >= 2 * 1440 && alert.price_2d == null },
-    { key: '1w',   ready: diffMinutes >= 7 * 1440 && alert.price_1w == null }
-  ];
-  let update = {};
-  let updated = false;
-  const pricePoints = [alert.price_1h, alert.price_4h, alert.price_1d, alert.price_next];
-  for (const { key, ready } of intervals) {
-    if (ready) {
-      try {
-        const price = await fetchFinnhubPrice(alert.symbol);
-        console.log(`[updateAlertPrices] Alert ID: ${alert.id}, Symbol: ${alert.symbol}, Interval: ${key}, Price: ${price}, Init Price: ${alert.price}`);
-        update[`price_${key}`] = price;
-        const accuracy = (alert.signal === 'Buy' && price > alert.price) || (alert.signal === 'Sell' && price < alert.price) ? 1 : 0;
-        update[`accuracy_${key}`] = accuracy;
-        updated = true;
-        pricePoints.push(price);
-      } catch (err) {
-        console.error(`[updateAlertPrices] Error updating alert ${alert.id} (${alert.symbol}) at interval ${key}:`, err);
-      }
+// Helper function to extract signal data from webhook content
+function extractSignalData(content) {
+  let symbol, signal, price, notes;
+  
+  if (typeof content === 'string') {
+    // Try to parse content string format: "SYMBOL Buy/Sell [at price] [- notes]"
+    const match = content.match(/^(\w+)\s+(Buy|Sell)(?:\s+at\s+(\d+(?:\.\d+)?))?\s*(?:-\s*(.+))?$/i);
+    if (match) {
+      [, symbol, signal, price, notes] = match;
+      symbol = symbol.toUpperCase();
+      signal = signal.charAt(0).toUpperCase() + signal.slice(1).toLowerCase();
+      if (price) price = parseFloat(price);
     }
+  } else if (typeof content === 'object') {
+    // Extract from object format
+    ({ symbol, signal, price, notes } = content);
+    if (symbol) symbol = symbol.toUpperCase();
+    if (signal) signal = signal.charAt(0).toUpperCase() + signal.slice(1).toLowerCase();
+    if (typeof price === 'string') price = parseFloat(price);
   }
-  // Calculate MFE/MAE
-  if (pricePoints.length > 0 && alert.price != null) {
-    let mfe = null, mae = null;
-    if (alert.signal === 'Buy') {
-      mfe = Math.max(...pricePoints.filter(p => p != null).map(p => p - alert.price));
-      mae = Math.min(...pricePoints.filter(p => p != null).map(p => p - alert.price));
-    } else if (alert.signal === 'Sell') {
-      mfe = Math.min(...pricePoints.filter(p => p != null).map(p => alert.price - p));
-      mae = Math.max(...pricePoints.filter(p => p != null).map(p => alert.price - p));
-    }
-    update.mfe = mfe;
-    update.mae = mae;
-    // Grading logic
-    let grade = '❌ Failed';
-    if (mfe != null && mfe > 0.01 * alert.price) grade = '✅ Accurate';
-    else if (mfe != null && mfe > 0) grade = '⚠️ Weak';
-    update.grade = grade;
-  }
-  if (updated || update.mfe !== undefined || update.mae !== undefined || update.grade !== undefined) {
-    // Build dynamic SQL for only the fields that are being updated
-    const fields = [];
-    const params = [];
-    if (update.price_5m !== undefined) { fields.push('price_5m = $' + (params.length + 1)); params.push(update.price_5m); }
-    if (update.price_1h !== undefined) { fields.push('price_1h = $' + (params.length + 1)); params.push(update.price_1h); }
-    if (update.price_4h !== undefined) { fields.push('price_4h = $' + (params.length + 1)); params.push(update.price_4h); }
-    if (update.price_next !== undefined) { fields.push('price_next = $' + (params.length + 1)); params.push(update.price_next); }
-    if (update.price_next_4h !== undefined) { fields.push('price_next_4h = $' + (params.length + 1)); params.push(update.price_next_4h); }
-    if (update.price_2d !== undefined) { fields.push('price_2d = $' + (params.length + 1)); params.push(update.price_2d); }
-    if (update.price_1w !== undefined) { fields.push('price_1w = $' + (params.length + 1)); params.push(update.price_1w); }
-    if (update.accuracy_5m !== undefined) { fields.push('accuracy_5m = $' + (params.length + 1)); params.push(update.accuracy_5m); }
-    if (update.accuracy_1h !== undefined) { fields.push('accuracy_1h = $' + (params.length + 1)); params.push(update.accuracy_1h); }
-    if (update.accuracy_4h !== undefined) { fields.push('accuracy_4h = $' + (params.length + 1)); params.push(update.accuracy_4h); }
-    if (update.accuracy_next !== undefined) { fields.push('accuracy_next = $' + (params.length + 1)); params.push(update.accuracy_next); }
-    if (update.accuracy_next_4h !== undefined) { fields.push('accuracy_next_4h = $' + (params.length + 1)); params.push(update.accuracy_next_4h); }
-    if (update.accuracy_2d !== undefined) { fields.push('accuracy_2d = $' + (params.length + 1)); params.push(update.accuracy_2d); }
-    if (update.accuracy_1w !== undefined) { fields.push('accuracy_1w = $' + (params.length + 1)); params.push(update.accuracy_1w); }
-    if (update.mfe !== undefined) { fields.push('mfe = $' + (params.length + 1)); params.push(update.mfe); }
-    if (update.mae !== undefined) { fields.push('mae = $' + (params.length + 1)); params.push(update.mae); }
-    if (update.grade !== undefined) { fields.push('grade = $' + (params.length + 1)); params.push(update.grade); }
-    if (fields.length > 0) {
-      const sql = `UPDATE alerts SET ${fields.join(', ')} WHERE id = $${params.length + 1}`;
-      params.push(alert.id);
-      await db.runQuery(sql, params);
-      console.log(`Updated alert ${alert.id} (${alert.symbol}) with new prices/accuracy/mfe/mae/grade.`);
-    }
-  }
+  
+  return { symbol, signal, price, notes };
 }
-
-async function runWorker() {
-  if (!FINNHUB_API_KEY) return;
-  const now = new Date();
-  if (!isMarketOpen(now)) return;
-  const sql = "SELECT * FROM alerts WHERE status = 'active'";
-  const alerts = await db.query(sql);
-  for (const alert of alerts) {
-    await updateAlertPrices(alert, now);
-  }
-}
-
-setInterval(runWorker, 5 * 60 * 1000);
-runWorker().catch(err => { console.error('Worker error:', err); });
-// --- End worker logic ---
 
 // Add this before startServer()
 app.get('/health', async (req, res) => {
+  // Check cache first
+  const cacheKey = 'health:status';
+  const cached = cache.get(cacheKey);
+  if (cached) {
+    console.log('[Cache] Health hit - serving from cache');
+    return res.status(200).json(cached);
+  }
+
+  // Cache miss - build health response
+  console.log('[Cache] Health miss - building response');
+  
   const health = {
     uptime: process.uptime(),
     timestamp: Date.now(),
@@ -319,14 +257,22 @@ app.get('/health', async (req, res) => {
   };
 
   try {
-    // Test database connection
-    const dbResult = await db.query("SELECT COUNT(*) as count FROM alerts");
+    // Test database connection with a single optimized query
+    const dbResult = await db.query(`
+      SELECT 
+        COUNT(*) as count,
+        MAX(timestamp) as last_alert_timestamp
+      FROM alerts
+    `);
+    console.log('[Health] DB query result:', dbResult);
     health.components.database = 'connected';
     health.database = {
-      alertCount: dbResult[0].count,
-      lastAlert: (await db.query("SELECT timestamp FROM alerts ORDER BY timestamp DESC LIMIT 1"))[0]?.timestamp
+      alertCount: (dbResult && dbResult[0] && dbResult[0].count) ? dbResult[0].count : 0,
+      lastAlert: (dbResult && dbResult[0] && dbResult[0].last_alert_timestamp) ? dbResult[0].last_alert_timestamp : null
     };
+    console.log('[Health] Processed DB result:', health.database);
   } catch (err) {
+    console.error('[Health] Database error:', err);
     health.components.database = 'error';
     health.database = { error: err.message };
     health.status = 'degraded';
@@ -354,6 +300,12 @@ app.get('/health', async (req, res) => {
     nodeVersion: process.version,
     environment: process.env.NODE_ENV
   };
+
+  // Add cache stats
+  health.cache = cache.getStats();
+
+  // Cache the health response for 30 seconds
+  cache.set(cacheKey, health, 30000);
 
   // Set appropriate status code
   const statusCode = health.status === 'healthy' ? 200 : 503;
@@ -392,9 +344,221 @@ async function startServer() {
     // console.log('[BOOT] Initializing database (including GCS download)...');
     await db.init();
     // console.log('[BOOT] Database initialized. Starting server...');
+    
+    // Run migration for existing alerts
+    await migrateExistingAlerts();
+    
     await startServer();
   } catch (err) {
     // console.error('[BOOT] Fatal error during database initialization. Server will not start:', err);
     process.exit(1);
   }
 })();
+
+async function smartUpdateAlert(alert) {
+  const now = new Date();
+  const alertTime = new Date(alert.timestamp);
+  const diffMs = now - alertTime;
+  const diffMinutes = diffMs / (1000 * 60);
+  const next930 = AlertScheduler.getNextTradingDay930(alertTime);
+  
+  // Determine which intervals need updating
+  const intervals = [
+    { key: '5m',   ready: diffMinutes >= 5 && alert.price_5m == null },
+    { key: '1h',   ready: diffMinutes >= 60 && alert.price_1h == null },
+    { key: '4h',   ready: diffMinutes >= 240 && alert.price_4h == null },
+    { key: 'next', ready: now >= next930 && alert.price_next == null },
+    { key: 'next_4h', ready: now >= next930 + 4 * 60 * 60 * 1000 && alert.price_next_4h == null },
+    { key: '2d',   ready: diffMinutes >= 2 * 1440 && alert.price_2d == null },
+    { key: '1w',   ready: diffMinutes >= 7 * 1440 && alert.price_1w == null }
+  ];
+  
+  let update = {};
+  let updated = false;
+  const pricePoints = [alert.price_1h, alert.price_4h, alert.price_1d, alert.price_next];
+  
+  for (const { key, ready } of intervals) {
+    if (ready) {
+      try {
+        const price = await fetchFinnhubPrice(alert.symbol);
+        console.log(`[smartUpdateAlert] Alert ID: ${alert.id}, Symbol: ${alert.symbol}, Interval: ${key}, Price: ${price}, Init Price: ${alert.price}`);
+        update[`price_${key}`] = price;
+        const accuracy = (alert.signal === 'Buy' && price > alert.price) || (alert.signal === 'Sell' && price < alert.price) ? 1 : 0;
+        update[`accuracy_${key}`] = accuracy;
+        updated = true;
+        pricePoints.push(price);
+      } catch (err) {
+        console.error(`[smartUpdateAlert] Error updating alert ${alert.id} (${alert.symbol}) at interval ${key}:`, err);
+      }
+    }
+  }
+  
+  // Calculate MFE/MAE
+  if (pricePoints.length > 0 && alert.price != null) {
+    let mfe = null, mae = null;
+    if (alert.signal === 'Buy') {
+      mfe = Math.max(...pricePoints.filter(p => p != null).map(p => p - alert.price));
+      mae = Math.min(...pricePoints.filter(p => p != null).map(p => p - alert.price));
+    } else if (alert.signal === 'Sell') {
+      mfe = Math.min(...pricePoints.filter(p => p != null).map(p => alert.price - p));
+      mae = Math.max(...pricePoints.filter(p => p != null).map(p => alert.price - p));
+    }
+    update.mfe = mfe;
+    update.mae = mae;
+    // Grading logic
+    let grade = '❌ Failed';
+    if (mfe != null && mfe > 0.01 * alert.price) grade = '✅ Accurate';
+    else if (mfe != null && mfe > 0) grade = '⚠️ Weak';
+    update.grade = grade;
+  }
+  
+  if (updated || update.mfe !== undefined || update.mae !== undefined || update.grade !== undefined) {
+    // Build dynamic SQL for only the fields that are being updated
+    const fields = [];
+    const params = [];
+    if (update.price_5m !== undefined) { fields.push('price_5m = $' + (params.length + 1)); params.push(update.price_5m); }
+    if (update.price_1h !== undefined) { fields.push('price_1h = $' + (params.length + 1)); params.push(update.price_1h); }
+    if (update.price_4h !== undefined) { fields.push('price_4h = $' + (params.length + 1)); params.push(update.price_4h); }
+    if (update.price_next !== undefined) { fields.push('price_next = $' + (params.length + 1)); params.push(update.price_next); }
+    if (update.price_next_4h !== undefined) { fields.push('price_next_4h = $' + (params.length + 1)); params.push(update.price_next_4h); }
+    if (update.price_2d !== undefined) { fields.push('price_2d = $' + (params.length + 1)); params.push(update.price_2d); }
+    if (update.price_1w !== undefined) { fields.push('price_1w = $' + (params.length + 1)); params.push(update.price_1w); }
+    if (update.accuracy_5m !== undefined) { fields.push('accuracy_5m = $' + (params.length + 1)); params.push(update.accuracy_5m); }
+    if (update.accuracy_1h !== undefined) { fields.push('accuracy_1h = $' + (params.length + 1)); params.push(update.accuracy_1h); }
+    if (update.accuracy_4h !== undefined) { fields.push('accuracy_4h = $' + (params.length + 1)); params.push(update.accuracy_4h); }
+    if (update.accuracy_next !== undefined) { fields.push('accuracy_next = $' + (params.length + 1)); params.push(update.accuracy_next); }
+    if (update.accuracy_next_4h !== undefined) { fields.push('accuracy_next_4h = $' + (params.length + 1)); params.push(update.accuracy_next_4h); }
+    if (update.accuracy_2d !== undefined) { fields.push('accuracy_2d = $' + (params.length + 1)); params.push(update.accuracy_2d); }
+    if (update.accuracy_1w !== undefined) { fields.push('accuracy_1w = $' + (params.length + 1)); params.push(update.accuracy_1w); }
+    if (update.mfe !== undefined) { fields.push('mfe = $' + (params.length + 1)); params.push(update.mfe); }
+    if (update.mae !== undefined) { fields.push('mae = $' + (params.length + 1)); params.push(update.mae); }
+    if (update.grade !== undefined) { fields.push('grade = $' + (params.length + 1)); params.push(update.grade); }
+    
+    // Calculate next update time
+    const nextUpdate = AlertScheduler.getNextUpdateTime(alert.timestamp);
+    if (nextUpdate) {
+      fields.push('next_update_time = $' + (params.length + 1));
+      params.push(nextUpdate.nextTime.toISOString());
+    } else {
+      fields.push('next_update_time = NULL');
+    }
+    
+    if (fields.length > 0) {
+      const sql = `UPDATE alerts SET ${fields.join(', ')} WHERE id = $${params.length + 1}`;
+      params.push(alert.id);
+      await db.runQuery(sql, params);
+      console.log(`Updated alert ${alert.id} (${alert.symbol}) with new prices/accuracy/mfe/mae/grade and next update time.`);
+    }
+  }
+}
+
+async function runSmartWorker() {
+  if (!FINNHUB_API_KEY) return;
+  
+  const now = new Date();
+  if (!AlertScheduler.isMarketOpen(now)) {
+    console.log('[SmartWorker] Market is closed, skipping updates');
+    return;
+  }
+  
+  try {
+    // Only query alerts that are due for updates
+    const sql = `
+      SELECT * FROM alerts 
+      WHERE status = 'active' 
+      AND next_update_time IS NOT NULL 
+      AND next_update_time <= $1
+      ORDER BY next_update_time ASC
+    `;
+    
+    const alerts = await db.query(sql, [now.toISOString()]);
+    
+    if (alerts.length === 0) {
+      console.log('[SmartWorker] No alerts due for updates');
+      return;
+    }
+    
+    console.log(`[SmartWorker] Processing ${alerts.length} alerts due for updates`);
+    
+    for (const alert of alerts) {
+      await smartUpdateAlert(alert);
+    }
+    
+    console.log(`[SmartWorker] Completed processing ${alerts.length} alerts`);
+  } catch (err) {
+    console.error('[SmartWorker] Error:', err);
+  }
+}
+
+// Run smart worker every 5 minutes, but it will only process alerts that need updates
+// DISABLED: Now using Cloud Scheduler for event-driven updates
+// setInterval(runSmartWorker, 5 * 60 * 1000);
+// runSmartWorker().catch(err => { console.error('Smart worker error:', err); });
+
+// Cloud Scheduler endpoint for event-driven updates
+app.post('/scheduler/update-alerts', async (req, res) => {
+  try {
+    console.log('[CloudScheduler] Received update request');
+    
+    const now = new Date();
+    if (!AlertScheduler.isMarketOpen(now)) {
+      console.log('[CloudScheduler] Market is closed, skipping updates');
+      return res.status(200).json({ status: 'skipped', reason: 'market_closed' });
+    }
+    
+    const alerts = await BatchProcessor.getAlertsDueForUpdate();
+    
+    if (alerts.length === 0) {
+      console.log('[CloudScheduler] No alerts due for updates');
+      return res.status(200).json({ status: 'no_updates', count: 0 });
+    }
+    
+    console.log(`[CloudScheduler] Processing ${alerts.length} alerts`);
+    await BatchProcessor.processBatchUpdate(alerts);
+    
+    res.status(200).json({ 
+      status: 'success', 
+      processed: alerts.length,
+      timestamp: now.toISOString()
+    });
+  } catch (err) {
+    console.error('[CloudScheduler] Error:', err);
+    res.status(500).json({ 
+      status: 'error', 
+      error: err.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// Health check endpoint for Cloud Scheduler
+app.get('/scheduler/health', async (req, res) => {
+  try {
+    const alerts = await BatchProcessor.getAlertsDueForUpdate();
+    const now = new Date();
+    const marketOpen = AlertScheduler.isMarketOpen(now);
+    
+    res.status(200).json({
+      status: 'healthy',
+      market_open: marketOpen,
+      alerts_due: alerts.length,
+      timestamp: now.toISOString()
+    });
+  } catch (err) {
+    res.status(500).json({
+      status: 'unhealthy',
+      error: err.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// Cache management endpoint
+app.get('/cache/stats', (req, res) => {
+  res.json(cache.getStats());
+});
+
+app.post('/cache/clear', (req, res) => {
+  cache.clear();
+  res.json({ status: 'cleared', timestamp: new Date().toISOString() });
+});

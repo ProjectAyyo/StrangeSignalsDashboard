@@ -24,13 +24,62 @@ const getColor = (accuracy) => {
   return 'inherit';
 };
 
-export default function AlertsTable({ data }) {
+const SortableHeader = ({ label, sortKey, currentSort, onSort }) => {
+  const isActive = currentSort.key === sortKey;
+  const direction = isActive ? currentSort.direction : null;
+  
+  const getArrow = () => {
+    if (!isActive) return '↕️';
+    return direction === 'asc' ? '↑' : '↓';
+  };
+
+  return (
+    <th 
+      style={{ 
+        borderBottom: '1px solid #ccc', 
+        padding: 8, 
+        cursor: 'pointer',
+        userSelect: 'none',
+        backgroundColor: isActive ? '#f0f0f0' : 'transparent'
+      }}
+      onClick={() => onSort(sortKey)}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span>{label}</span>
+        <span style={{ fontSize: '12px', marginLeft: '4px' }}>{getArrow()}</span>
+      </div>
+    </th>
+  );
+};
+
+export default function AlertsTable({ data, sortConfig, onSort }) {
+  const headers = [
+    { label: 'Time', key: 'timestamp' },
+    { label: 'Symbol', key: 'ticker' },
+    { label: 'Action', key: 'action' },
+    { label: 'Init Price', key: 'initial_price' },
+    ...intervals.flatMap(i => [
+      { label: i.label, key: `price_${i.key}` },
+      { label: 'Acc', key: `accuracy_${i.key}` }
+    ]),
+    { label: 'MFE', key: 'mfe' },
+    { label: 'MAE', key: 'mae' },
+    { label: 'Grade', key: 'grade' }
+  ];
+
   return (
     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
       <thead>
         <tr>
-          {['Time','Symbol','Action','Init Price',...intervals.flatMap(i => [i.label,'Acc']),'MFE','MAE','Grade']
-            .map(h => <th key={h} style={{ borderBottom: '1px solid #ccc', padding: 8 }}>{h}</th>)}
+          {headers.map(header => (
+            <SortableHeader
+              key={header.key}
+              label={header.label}
+              sortKey={header.key}
+              currentSort={sortConfig}
+              onSort={onSort}
+            />
+          ))}
         </tr>
       </thead>
       <tbody>

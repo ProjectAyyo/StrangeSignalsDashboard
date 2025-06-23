@@ -1,0 +1,181 @@
+const { fetchFinnhubPrice } = require('./finnhub');
+const db = require('../db/database');
+const AlertScheduler = require('./scheduler');
+const cache = require('./cache');
+
+class BatchProcessor {
+  static async processBatchUpdate(alerts) {
+    if (alerts.length === 0) return;
+    
+    console.log(`[BatchProcessor] Processing ${alerts.length} alerts in batch`);
+    
+    // Group alerts by symbol to reduce API calls
+    const symbolGroups = {};
+    alerts.forEach(alert => {
+      if (!symbolGroups[alert.symbol]) {
+        symbolGroups[alert.symbol] = [];
+      }
+      symbolGroups[alert.symbol].push(alert);
+    });
+    
+    // Fetch prices for each symbol once
+    const priceCache = {};
+    for (const symbol of Object.keys(symbolGroups)) {
+      try {
+        const price = await fetchFinnhubPrice(symbol);
+        priceCache[symbol] = price;
+        console.log(`[BatchProcessor] Fetched price for ${symbol}: $${price}`);
+      } catch (err) {
+        console.error(`[BatchProcessor] Error fetching price for ${symbol}:`, err);
+        priceCache[symbol] = null;
+      }
+    }
+    
+    // Process each alert with cached prices
+    const updates = [];
+    for (const alert of alerts) {
+      const price = priceCache[alert.symbol];
+      if (price === null) continue;
+      
+      const update = await this.processSingleAlert(alert, price);
+      if (update) {
+        updates.push(update);
+      }
+    }
+    
+    // Batch database updates
+    if (updates.length > 0) {
+      await this.batchDatabaseUpdate(updates);
+      
+      // Invalidate relevant caches after updates
+      cache.invalidate(cache.keys.alerts);
+      cache.invalidate(cache.keys.alertsDue);
+      cache.invalidate(/^alerts:/);
+      cache.invalidate(/^health:/);
+    }
+    
+    console.log(`[BatchProcessor] Completed batch processing. Updated ${updates.length} alerts.`);
+  }
+  
+  static async processSingleAlert(alert, currentPrice) {
+    const now = new Date();
+    const alertTime = new Date(alert.timestamp);
+    const diffMs = now - alertTime;
+    const diffMinutes = diffMs / (1000 * 60);
+    const next930 = AlertScheduler.getNextTradingDay930(alertTime);
+    
+    // Determine which intervals need updating
+    const intervals = [
+      { key: '5m',   ready: diffMinutes >= 5 && alert.price_5m == null },
+      { key: '1h',   ready: diffMinutes >= 60 && alert.price_1h == null },
+      { key: '4h',   ready: diffMinutes >= 240 && alert.price_4h == null },
+      { key: 'next', ready: now >= next930 && alert.price_next == null },
+      { key: 'next_4h', ready: now >= next930 + 4 * 60 * 60 * 1000 && alert.price_next_4h == null },
+      { key: '2d',   ready: diffMinutes >= 2 * 1440 && alert.price_2d == null },
+      { key: '1w',   ready: diffMinutes >= 7 * 1440 && alert.price_1w == null }
+    ];
+    
+    let update = { id: alert.id };
+    let updated = false;
+    const pricePoints = [alert.price_1h, alert.price_4h, alert.price_1d, alert.price_next];
+    
+    for (const { key, ready } of intervals) {
+      if (ready) {
+        update[`price_${key}`] = currentPrice;
+        const accuracy = (alert.signal === 'Buy' && currentPrice > alert.price) || (alert.signal === 'Sell' && currentPrice < alert.price) ? 1 : 0;
+        update[`accuracy_${key}`] = accuracy;
+        updated = true;
+        pricePoints.push(currentPrice);
+      }
+    }
+    
+    // Calculate MFE/MAE
+    if (pricePoints.length > 0 && alert.price != null) {
+      let mfe = null, mae = null;
+      if (alert.signal === 'Buy') {
+        mfe = Math.max(...pricePoints.filter(p => p != null).map(p => p - alert.price));
+        mae = Math.min(...pricePoints.filter(p => p != null).map(p => p - alert.price));
+      } else if (alert.signal === 'Sell') {
+        mfe = Math.min(...pricePoints.filter(p => p != null).map(p => alert.price - p));
+        mae = Math.max(...pricePoints.filter(p => p != null).map(p => alert.price - p));
+      }
+      update.mfe = mfe;
+      update.mae = mae;
+      
+      // Grading logic
+      let grade = '❌ Failed';
+      if (mfe != null && mfe > 0.01 * alert.price) grade = '✅ Accurate';
+      else if (mfe != null && mfe > 0) grade = '⚠️ Weak';
+      update.grade = grade;
+    }
+    
+    // Calculate next update time
+    const nextUpdate = AlertScheduler.getNextUpdateTime(alert.timestamp);
+    update.next_update_time = nextUpdate ? nextUpdate.nextTime.toISOString() : null;
+    
+    return updated || update.mfe !== undefined || update.mae !== undefined || update.grade !== undefined ? update : null;
+  }
+  
+  static async batchDatabaseUpdate(updates) {
+    if (updates.length === 0) return;
+    
+    // Use a transaction for batch updates
+    const client = await db.pool.connect();
+    try {
+      await client.query('BEGIN');
+      
+      for (const update of updates) {
+        const { id, ...fields } = update;
+        const fieldNames = Object.keys(fields);
+        const fieldValues = Object.values(fields);
+        
+        if (fieldNames.length > 0) {
+          const setClause = fieldNames.map((field, index) => `${field} = $${index + 2}`).join(', ');
+          const sql = `UPDATE alerts SET ${setClause} WHERE id = $1`;
+          await client.query(sql, [id, ...fieldValues]);
+        }
+      }
+      
+      await client.query('COMMIT');
+      console.log(`[BatchProcessor] Successfully updated ${updates.length} alerts in transaction`);
+    } catch (err) {
+      await client.query('ROLLBACK');
+      console.error('[BatchProcessor] Error in batch update:', err);
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+  
+  static async getAlertsDueForUpdate() {
+    // Check cache first
+    const cacheKey = cache.keys.alertsDue;
+    const cached = cache.get(cacheKey);
+    if (cached) {
+      console.log('[Cache] Alerts due hit - serving from cache');
+      return cached;
+    }
+
+    // Cache miss - query database
+    console.log('[Cache] Alerts due miss - querying database');
+    
+    const now = new Date();
+    const sql = `
+      SELECT * FROM alerts 
+      WHERE status = 'active' 
+      AND next_update_time IS NOT NULL 
+      AND next_update_time <= $1
+      ORDER BY next_update_time ASC
+      LIMIT 50
+    `;
+    
+    const alerts = await db.query(sql, [now.toISOString()]);
+    
+    // Cache the result for 10 seconds (shorter TTL for this data)
+    cache.set(cacheKey, alerts, 10000);
+    
+    return alerts;
+  }
+}
+
+module.exports = BatchProcessor; 

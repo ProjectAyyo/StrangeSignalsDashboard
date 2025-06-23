@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "strange-signals-dashboard",
+  "private_key_id": "1b328673139b33b00d4ce818e7fe96db9cfe9ba2",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQCa+ojNzfmxXRNO\n9tuIs7vkhqqr6s04aAuEKR6vaSC9zxKEmyzV4yusODAGScFHYRvQM6hvx/Q0Y7Mf\ne02eR6HA1bUIadCEF8CDH2d3GKJPvFdLaYKSl6Sn9bs0jXDFab+X/RHRw0EZs1Vh\nDgdFE3lPkF+Z6X8xiqYt2DIYv30dZQJLUs8hZ8qJBymk6LSiRbG6lL7wMxKcrlyn\nv18qXoRMywHXXbGEYQpiucvm4KVnvmkCnELWNs7hwvSDgbDQL+aSq598l0O/iUeY\nn+MPUCZJQOqrZNLh1zriGIdQPfvWeH/dKyc3zaG9j7Cldv8keDKMKbFSNTT+HUPD\nWOIKBZcFAgMBAAECggEACcQNUFixKg/JKnHsUhAvYB5rTVOJtIr75MtZi2imv0c3\n7cLAf8blpt/QiOjnZMnWAJfsvoR9WzrIHAz/TmDJrNbapknSsaw0fZ7CPJNBESC3\naIFg0L99CPd3YT+jclEwWVHBaHQzGz09fVTuuNfaDl005QQ9d1/7CksEFyKj7fDp\nKiV3fC7T5jGKQYuISkBW717OQxKDPkn7KkWI3np52U/jjf3a/VX1Eo8hCRUXg21L\n0GLlad4tAZcrMovG3l6AjXNVaFWOM844mFGUKpzvOMl/hMfQtHzex38GWmMDXIYy\nwpNxpGcZjfWvdGSBFb+DBKkypYA1cDv+WZRCKvqdoQKBgQDJCGBmZCRMukmftxpk\nF41aD4DrrFjenJ1+vFTvVLsLCYGLPZNx0wB7N8q+9GB6zfMVM+mmgIkNFrkQ9CY+\nCzmoqfLK+Qw3H7shKWTC/pnR0G6A6FTf+lUHNLOUSzt3UhHgEsaZdmJ5fXJZXHIg\n8AELpsd4OsxyEDTWg+4gjESCYQKBgQDFWoaSG5t65IyCKNUwrWUgOK1JcIeRQoUZ\neb8DLp5DBRjXS7xVWKSVJg4d51mmUIjoDw97om5tZM67u+3XVn1WMj+OmFfENsTv\ndoznzFT0g6/5g2DwTCiwONH7cKmUJtMOhHDYVoy2J9S50+iOSQJFLrwKthBqQdxt\nNlQxInUfJQKBgQCXWIoSq9O0PA8Pge8Jab3ODpv1UXQ6a9gaQLkE0VpbjdWMOVhW\nug7DtRYbOqmj6obV8JY39s63HuNHAzgDP7ox43hZHLP4kBf2eE5WiwzMq8l1nPPB\nB5qZ6TBFNXpYc13nvtrrT/gFFM9QvUtixq1S00Wam1Gtkcvlr79Hm7I8IQKBgQC7\nOHHJUd9h6kdRgyMcFqKEur/Jl7NEHnLeBB0tC6Cfu8ohFHwKCxm3VG63962YlXYL\nj54Ej8dqh+OHPXUYf7hPeUPKJsO8JKkW8sQhcjp17CeY8QWZcOZ4pq6tdeep4FsA\nvqu+z/yVIZww3dMUiDZbI0bIcoeIBgryoEOmiSXK8QKBgGx2MCarSyL8qqmtSiaF\nlvCWhSG26irUdecQ+ClGq3r86tsRuLIAw/sjydBnsfK37FQ21JReGqjQGh2QIwvF\nFVeTJ56J32YU/U2y1NWqZOeCAYCY/eQZ972uBxF2McKqtuntAW84zCrAgWzh50OS\nZzTTNTekmD+axC9BJ6+qhuvr\n-----END PRIVATE KEY-----\n",
+  "client_email": "schdlr@strange-signals-dashboard.iam.gserviceaccount.com",
+  "client_id": "112636334806749041117",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/schdlr%40strange-signals-dashboard.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}

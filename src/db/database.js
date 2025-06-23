@@ -8,6 +8,10 @@ class Database {
       password: process.env.PGPASSWORD,
       database: process.env.PGDATABASE,
       port: process.env.PGPORT || 5432,
+      // Connection pooling optimization
+      max: 20, // Maximum number of clients in the pool
+      idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
+      connectionTimeoutMillis: 2000, // Return an error after 2 seconds if connection could not be established
       // For Cloud Run + Cloud SQL Auth Proxy
       // If using Unix socket, host should be '/cloudsql/INSTANCE_CONNECTION_NAME'
     });
@@ -42,9 +46,25 @@ class Database {
             accuracy_1w INTEGER,
             mfe REAL,
             mae REAL,
-            grade TEXT
+            grade TEXT,
+            next_update_time TIMESTAMP,
+            update_intervals JSONB
       )
     `);
+    
+    // Add new columns if they don't exist (for existing databases)
+    try {
+      await this.pool.query('ALTER TABLE alerts ADD COLUMN IF NOT EXISTS next_update_time TIMESTAMP');
+    } catch (err) {
+      // Column might already exist, ignore error
+    }
+    
+    try {
+      await this.pool.query('ALTER TABLE alerts ADD COLUMN IF NOT EXISTS update_intervals JSONB');
+    } catch (err) {
+      // Column might already exist, ignore error
+    }
+    
     this.initialized = true;
   }
 

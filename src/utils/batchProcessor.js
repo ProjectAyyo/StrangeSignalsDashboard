@@ -48,8 +48,8 @@ class BatchProcessor {
       await this.batchDatabaseUpdate(updates);
       
       // Invalidate relevant caches after updates
-      cache.invalidate(cache.keys.alerts);
-      cache.invalidate(cache.keys.alertsDue);
+      cache.invalidate('alerts:all');
+      cache.invalidate('alerts:due');
       cache.invalidate(/^alerts:/);
       cache.invalidate(/^health:/);
     }
@@ -149,7 +149,7 @@ class BatchProcessor {
   
   static async getAlertsDueForUpdate() {
     // Check cache first
-    const cacheKey = cache.keys.alertsDue;
+    const cacheKey = 'alerts:due';
     const cached = cache.get(cacheKey);
     if (cached) {
       console.log('[Cache] Alerts due hit - serving from cache');

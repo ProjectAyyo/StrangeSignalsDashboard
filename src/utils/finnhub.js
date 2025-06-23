@@ -9,7 +9,7 @@ async function fetchFinnhubPrice(symbol) {
   }
 
   // Check cache first
-  const cacheKey = cache.keys.price(symbol);
+  const cacheKey = `price:${symbol}`;
   const cached = cache.get(cacheKey);
   if (cached) {
     console.log(`[Cache] Price for ${symbol} hit - serving from cache: $${cached}`);

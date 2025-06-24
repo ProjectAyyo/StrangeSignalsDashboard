@@ -4,6 +4,7 @@ const typeDefs = gql`
   type Alert {
     id: ID!
     symbol: String!
+    frame: String
     signal: String!
     price: Float!
     timestamp: String!

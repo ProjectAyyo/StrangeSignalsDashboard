@@ -20,7 +20,7 @@ const resolvers = {
 
         // Cache miss - query database
         console.log('[Cache] Alerts miss - querying database');
-        const result = await db.query('SELECT * FROM alerts ORDER BY timestamp DESC');
+      const result = await db.query('SELECT * FROM alerts ORDER BY timestamp DESC');
         console.log('[DB] Query result:', result);
         if (!Array.isArray(result)) {
           console.error('[DB] Query did not return an array:', result);
@@ -28,7 +28,7 @@ const resolvers = {
         }
         // Cache the result for 30 seconds
         cache.set('alerts:all', result, 30000);
-        return result;
+      return result;
       } catch (err) {
         console.error('[Resolver] Error in alerts resolver:', err);
         return [];
@@ -74,6 +74,13 @@ const resolvers = {
         }
       }
       
+      // Extract frame from notes (if present)
+      let frame = null;
+      if (input.notes) {
+        // Use the first word or label in notes as the frame (customize as needed)
+        frame = input.notes.split(/\s+/)[0];
+      }
+      
       // Calculate scheduling information
       const updateIntervals = AlertScheduler.calculateAllUpdateTimes(timestamp);
       const nextUpdate = AlertScheduler.getNextUpdateTime(timestamp);
@@ -82,6 +89,7 @@ const resolvers = {
       const alert = {
         id,
         ...input,
+        frame,
         price,
         timestamp,
         status: 'active',
@@ -90,8 +98,8 @@ const resolvers = {
       };
 
       await db.runQuery(
-        'INSERT INTO alerts (id, symbol, signal, price, timestamp, status, notes, next_update_time, update_intervals) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
-        [id, input.symbol, input.signal, price, timestamp, 'active', input.notes, nextUpdateTime, JSON.stringify(updateIntervals)]
+        'INSERT INTO alerts (id, symbol, frame, signal, price, timestamp, status, notes, next_update_time, update_intervals) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
+        [id, input.symbol, frame, input.signal, price, timestamp, 'active', input.notes, nextUpdateTime, JSON.stringify(updateIntervals)]
       );
 
       // Invalidate relevant caches

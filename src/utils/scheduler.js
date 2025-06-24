@@ -1,4 +1,5 @@
 const { fetchFinnhubPrice } = require('./finnhub');
+const { DateTime } = require('luxon');
 
 // Centralized intervals configuration
 const INTERVALS_CONFIG = [
@@ -46,13 +47,16 @@ class AlertScheduler {
   }
   
   static getNextTradingDay930(alertTime) {
-    let next = new Date(alertTime);
-    next.setDate(next.getDate() + 1);
-    next.setHours(9, 30, 0, 0);
-    while (next.getDay() === 0 || next.getDay() === 6) {
-      next.setDate(next.getDate() + 1);
+    // Use luxon to handle timezones
+    let dt = DateTime.fromISO(alertTime, { zone: 'utc' }).setZone('America/New_York');
+    // Move to next day
+    dt = dt.plus({ days: 1 }).set({ hour: 9, minute: 30, second: 0, millisecond: 0 });
+    // Skip weekends
+    while (dt.weekday === 6 || dt.weekday === 7) { // 6 = Saturday, 7 = Sunday
+      dt = dt.plus({ days: 1 });
     }
-    return next;
+    // Convert back to UTC for storage/calculation
+    return dt.setZone('utc').toJSDate();
   }
   
   static isMarketOpen(now) {

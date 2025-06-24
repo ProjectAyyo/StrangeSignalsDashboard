@@ -64,22 +64,22 @@ function App() {
     return sorted;
   }, [filteredAlerts, sortConfig]);
 
-  const fetchAlerts = async () => {
-    try {
-      const res = await axios.post(GRAPHQL_ENDPOINT, {
-        query: `{
-          alerts {
-            id
-            symbol
-            signal
-            price
-            timestamp
-            status
-            notes
+    const fetchAlerts = async () => {
+      try {
+        const res = await axios.post(GRAPHQL_ENDPOINT, {
+          query: `{
+            alerts {
+              id
+              symbol
+              signal
+              price
+              timestamp
+              status
+              notes
             price_5m
             price_1h
-            price_4h
-            price_next
+              price_4h
+              price_next
             price_next_4h
             price_2d
             price_1w
@@ -88,34 +88,36 @@ function App() {
             price_3m
             accuracy_5m
             accuracy_1h
-            accuracy_4h
-            accuracy_next
+              accuracy_4h
+              accuracy_next
             accuracy_next_4h
             accuracy_2d
             accuracy_1w
             accuracy_14d
             accuracy_1m
             accuracy_3m
-            mfe
-            mae
-            grade
-          }
-        }`
-      }, {
-        headers: { 'Content-Type': 'application/json' }
-      });
+              mfe
+              mae
+              grade
+            frame
+            }
+          }`
+        }, {
+          headers: { 'Content-Type': 'application/json' }
+        });
       
-      // Map GraphQL fields to dashboard fields
-      const mapped = res.data.data.alerts.map(a => ({
-        id: a.id,
-        ticker: a.symbol,
-        action: a.signal,
-        initial_price: a.price,
-        timestamp: a.timestamp,
+        // Map GraphQL fields to dashboard fields
+        const mapped = res.data.data.alerts.map(a => ({
+          id: a.id,
+          ticker: a.symbol,
+        frame: a.frame,
+          action: a.signal,
+          initial_price: a.price,
+          timestamp: a.timestamp,
         price_5m: a.price_5m,
         price_1h: a.price_1h,
-        price_4h: a.price_4h,
-        price_next: a.price_next,
+          price_4h: a.price_4h,
+          price_next: a.price_next,
         price_next_4h: a.price_next_4h,
         price_2d: a.price_2d,
         price_1w: a.price_1w,
@@ -124,24 +126,24 @@ function App() {
         price_3m: a.price_3m,
         accuracy_5m: a.accuracy_5m,
         accuracy_1h: a.accuracy_1h,
-        accuracy_4h: a.accuracy_4h,
-        accuracy_next: a.accuracy_next,
+          accuracy_4h: a.accuracy_4h,
+          accuracy_next: a.accuracy_next,
         accuracy_next_4h: a.accuracy_next_4h,
         accuracy_2d: a.accuracy_2d,
         accuracy_1w: a.accuracy_1w,
         accuracy_14d: a.accuracy_14d,
         accuracy_1m: a.accuracy_1m,
         accuracy_3m: a.accuracy_3m,
-        mfe: a.mfe,
-        mae: a.mae,
-        grade: a.grade,
-        notes: a.notes,
-      }));
-      setAlerts(mapped);
-    } catch (err) {
-      console.error('Error fetching alerts:', err);
-    }
-  };
+          mfe: a.mfe,
+          mae: a.mae,
+          grade: a.grade,
+          notes: a.notes,
+        }));
+        setAlerts(mapped);
+      } catch (err) {
+        console.error('Error fetching alerts:', err);
+      }
+    };
 
   useEffect(() => {
     // Initial fetch
@@ -195,6 +197,7 @@ function App() {
                   mfe
                   mae
                   grade
+                  frame
                 }
               }
             `
@@ -254,6 +257,7 @@ function App() {
                   mfe
                   mae
                   grade
+                  frame
                 }
               }
             `
@@ -318,7 +322,7 @@ function App() {
   return (
     <div style={{ padding: 20 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-        <h1>Signals Dashboard</h1>
+      <h1>Signals Dashboard</h1>
         <div style={{ 
           display: 'flex', 
           alignItems: 'center', 

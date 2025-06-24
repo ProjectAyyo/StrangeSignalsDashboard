@@ -25,6 +25,7 @@ class Database {
           CREATE TABLE IF NOT EXISTS alerts (
             id TEXT PRIMARY KEY,
             symbol TEXT NOT NULL,
+            frame TEXT,
             signal TEXT NOT NULL,
             price REAL NOT NULL,
             timestamp TEXT NOT NULL,
@@ -59,6 +60,12 @@ class Database {
     `);
     
     // Add new columns if they don't exist (for existing databases)
+    try {
+      await this.pool.query('ALTER TABLE alerts ADD COLUMN IF NOT EXISTS frame TEXT');
+    } catch (err) {
+      // Column might already exist, ignore error
+    }
+    
     try {
       await this.pool.query('ALTER TABLE alerts ADD COLUMN IF NOT EXISTS next_update_time TIMESTAMP');
     } catch (err) {

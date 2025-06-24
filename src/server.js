@@ -362,15 +362,19 @@ async function smartUpdateAlert(alert) {
   const diffMinutes = diffMs / (1000 * 60);
   const next930 = AlertScheduler.getNextTradingDay930(alertTime);
   
+  // Get all interval keys from centralized configuration
+  const allIntervalKeys = AlertScheduler.getAllIntervalKeys();
+  
   // Determine which intervals need updating
   const intervals = [
-    { key: '5m',   ready: diffMinutes >= 5 && alert.price_5m == null },
-    { key: '1h',   ready: diffMinutes >= 60 && alert.price_1h == null },
-    { key: '4h',   ready: diffMinutes >= 240 && alert.price_4h == null },
+    // Regular intervals from configuration
+    ...AlertScheduler.getIntervalsConfig().map(interval => ({
+      key: interval.key,
+      ready: diffMinutes >= interval.minutes && alert[`price_${interval.key}`] == null
+    })),
+    // Special intervals
     { key: 'next', ready: now >= next930 && alert.price_next == null },
-    { key: 'next_4h', ready: now >= next930 + 4 * 60 * 60 * 1000 && alert.price_next_4h == null },
-    { key: '2d',   ready: diffMinutes >= 2 * 1440 && alert.price_2d == null },
-    { key: '1w',   ready: diffMinutes >= 7 * 1440 && alert.price_1w == null }
+    { key: 'next_4h', ready: now >= next930 + 4 * 60 * 60 * 1000 && alert.price_next_4h == null }
   ];
   
   let update = {};
@@ -416,20 +420,19 @@ async function smartUpdateAlert(alert) {
     // Build dynamic SQL for only the fields that are being updated
     const fields = [];
     const params = [];
-    if (update.price_5m !== undefined) { fields.push('price_5m = $' + (params.length + 1)); params.push(update.price_5m); }
-    if (update.price_1h !== undefined) { fields.push('price_1h = $' + (params.length + 1)); params.push(update.price_1h); }
-    if (update.price_4h !== undefined) { fields.push('price_4h = $' + (params.length + 1)); params.push(update.price_4h); }
-    if (update.price_next !== undefined) { fields.push('price_next = $' + (params.length + 1)); params.push(update.price_next); }
-    if (update.price_next_4h !== undefined) { fields.push('price_next_4h = $' + (params.length + 1)); params.push(update.price_next_4h); }
-    if (update.price_2d !== undefined) { fields.push('price_2d = $' + (params.length + 1)); params.push(update.price_2d); }
-    if (update.price_1w !== undefined) { fields.push('price_1w = $' + (params.length + 1)); params.push(update.price_1w); }
-    if (update.accuracy_5m !== undefined) { fields.push('accuracy_5m = $' + (params.length + 1)); params.push(update.accuracy_5m); }
-    if (update.accuracy_1h !== undefined) { fields.push('accuracy_1h = $' + (params.length + 1)); params.push(update.accuracy_1h); }
-    if (update.accuracy_4h !== undefined) { fields.push('accuracy_4h = $' + (params.length + 1)); params.push(update.accuracy_4h); }
-    if (update.accuracy_next !== undefined) { fields.push('accuracy_next = $' + (params.length + 1)); params.push(update.accuracy_next); }
-    if (update.accuracy_next_4h !== undefined) { fields.push('accuracy_next_4h = $' + (params.length + 1)); params.push(update.accuracy_next_4h); }
-    if (update.accuracy_2d !== undefined) { fields.push('accuracy_2d = $' + (params.length + 1)); params.push(update.accuracy_2d); }
-    if (update.accuracy_1w !== undefined) { fields.push('accuracy_1w = $' + (params.length + 1)); params.push(update.accuracy_1w); }
+    
+    // Add all possible price and accuracy fields dynamically
+    for (const key of allIntervalKeys) {
+      if (update[`price_${key}`] !== undefined) { 
+        fields.push(`price_${key} = $${params.length + 1}`); 
+        params.push(update[`price_${key}`]); 
+      }
+      if (update[`accuracy_${key}`] !== undefined) { 
+        fields.push(`accuracy_${key} = $${params.length + 1}`); 
+        params.push(update[`accuracy_${key}`]); 
+      }
+    }
+    
     if (update.mfe !== undefined) { fields.push('mfe = $' + (params.length + 1)); params.push(update.mfe); }
     if (update.mae !== undefined) { fields.push('mae = $' + (params.length + 1)); params.push(update.mae); }
     if (update.grade !== undefined) { fields.push('grade = $' + (params.length + 1)); params.push(update.grade); }
@@ -456,10 +459,11 @@ async function runSmartWorker() {
   if (!FINNHUB_API_KEY) return;
   
   const now = new Date();
-  if (!AlertScheduler.isMarketOpen(now)) {
-    console.log('[SmartWorker] Market is closed, skipping updates');
-    return;
-  }
+  // REMOVED: Market hour restriction
+  // if (!AlertScheduler.isMarketOpen(now)) {
+  //   console.log('[SmartWorker] Market is closed, skipping updates');
+  //   return;
+  // }
   
   try {
     // Only query alerts that are due for updates
@@ -501,10 +505,11 @@ app.post('/scheduler/update-alerts', async (req, res) => {
     console.log('[CloudScheduler] Received update request');
     
     const now = new Date();
-    if (!AlertScheduler.isMarketOpen(now)) {
-      console.log('[CloudScheduler] Market is closed, skipping updates');
-      return res.status(200).json({ status: 'skipped', reason: 'market_closed' });
-    }
+    // REMOVED: Market hour restriction
+    // if (!AlertScheduler.isMarketOpen(now)) {
+    //   console.log('[CloudScheduler] Market is closed, skipping updates');
+    //   return res.status(200).json({ status: 'skipped', reason: 'market_closed' });
+    // }
     
     const alerts = await BatchProcessor.getAlertsDueForUpdate();
     

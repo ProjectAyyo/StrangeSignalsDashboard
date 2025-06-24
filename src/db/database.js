@@ -37,6 +37,9 @@ class Database {
             price_next_4h REAL,
             price_2d REAL,
             price_1w REAL,
+            price_14d REAL,
+            price_1m REAL,
+            price_3m REAL,
             accuracy_5m INTEGER,
             accuracy_1h INTEGER,
             accuracy_4h INTEGER,
@@ -44,6 +47,9 @@ class Database {
             accuracy_next_4h INTEGER,
             accuracy_2d INTEGER,
             accuracy_1w INTEGER,
+            accuracy_14d INTEGER,
+            accuracy_1m INTEGER,
+            accuracy_3m INTEGER,
             mfe REAL,
             mae REAL,
             grade TEXT,
@@ -63,6 +69,20 @@ class Database {
       await this.pool.query('ALTER TABLE alerts ADD COLUMN IF NOT EXISTS update_intervals JSONB');
     } catch (err) {
       // Column might already exist, ignore error
+    }
+
+    // Add new interval columns if they don't exist
+    const newColumns = [
+      'price_14d', 'price_1m', 'price_3m',
+      'accuracy_14d', 'accuracy_1m', 'accuracy_3m'
+    ];
+    
+    for (const column of newColumns) {
+      try {
+        await this.pool.query(`ALTER TABLE alerts ADD COLUMN IF NOT EXISTS ${column} REAL`);
+      } catch (err) {
+        // Column might already exist, ignore error
+      }
     }
     
     this.initialized = true;

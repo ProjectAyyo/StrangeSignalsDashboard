@@ -64,15 +64,19 @@ class BatchProcessor {
     const diffMinutes = diffMs / (1000 * 60);
     const next930 = AlertScheduler.getNextTradingDay930(alertTime);
     
+    // Get all interval keys from centralized configuration
+    const allIntervalKeys = AlertScheduler.getAllIntervalKeys();
+    
     // Determine which intervals need updating
     const intervals = [
-      { key: '5m',   ready: diffMinutes >= 5 && alert.price_5m == null },
-      { key: '1h',   ready: diffMinutes >= 60 && alert.price_1h == null },
-      { key: '4h',   ready: diffMinutes >= 240 && alert.price_4h == null },
+      // Regular intervals from configuration
+      ...AlertScheduler.getIntervalsConfig().map(interval => ({
+        key: interval.key,
+        ready: diffMinutes >= interval.minutes && alert[`price_${interval.key}`] == null
+      })),
+      // Special intervals
       { key: 'next', ready: now >= next930 && alert.price_next == null },
-      { key: 'next_4h', ready: now >= next930 + 4 * 60 * 60 * 1000 && alert.price_next_4h == null },
-      { key: '2d',   ready: diffMinutes >= 2 * 1440 && alert.price_2d == null },
-      { key: '1w',   ready: diffMinutes >= 7 * 1440 && alert.price_1w == null }
+      { key: 'next_4h', ready: now >= next930 + 4 * 60 * 60 * 1000 && alert.price_next_4h == null }
     ];
     
     let update = { id: alert.id };

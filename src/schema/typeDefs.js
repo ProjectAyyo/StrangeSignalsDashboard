@@ -16,6 +16,9 @@ const typeDefs = gql`
     price_next_4h: Float
     price_2d: Float
     price_1w: Float
+    price_14d: Float
+    price_1m: Float
+    price_3m: Float
     accuracy_5m: Int
     accuracy_1h: Int
     accuracy_4h: Int
@@ -23,6 +26,9 @@ const typeDefs = gql`
     accuracy_next_4h: Int
     accuracy_2d: Int
     accuracy_1w: Int
+    accuracy_14d: Int
+    accuracy_1m: Int
+    accuracy_3m: Int
     mfe: Float
     mae: Float
     grade: String

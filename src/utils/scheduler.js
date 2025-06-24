@@ -1,5 +1,17 @@
 const { fetchFinnhubPrice } = require('./finnhub');
 
+// Centralized intervals configuration
+const INTERVALS_CONFIG = [
+  { key: '5m', minutes: 5, label: '5 minutes' },
+  { key: '1h', minutes: 60, label: '1 hour' },
+  { key: '4h', minutes: 240, label: '4 hours' },
+  { key: '2d', minutes: 2 * 1440, label: '2 days' },
+  { key: '1w', minutes: 7 * 1440, label: '1 week' },
+  { key: '14d', minutes: 14 * 1440, label: '14 days' },
+  { key: '1m', minutes: 30 * 1440, label: '1 month' },
+  { key: '3m', minutes: 90 * 1440, label: '3 months' }
+];
+
 class AlertScheduler {
   static getNextUpdateTime(alertTime) {
     const now = new Date();
@@ -7,17 +19,8 @@ class AlertScheduler {
     const diffMs = now - alertDate;
     const diffMinutes = diffMs / (1000 * 60);
     
-    // Define update intervals in minutes
-    const intervals = [
-      { key: '5m', minutes: 5 },
-      { key: '1h', minutes: 60 },
-      { key: '4h', minutes: 240 },
-      { key: '2d', minutes: 2 * 1440 },
-      { key: '1w', minutes: 7 * 1440 }
-    ];
-    
     // Find the next interval that needs updating
-    for (const interval of intervals) {
+    for (const interval of INTERVALS_CONFIG) {
       if (diffMinutes < interval.minutes) {
         const nextTime = new Date(alertDate);
         nextTime.setMinutes(nextTime.getMinutes() + interval.minutes);
@@ -68,15 +71,7 @@ class AlertScheduler {
     const updateTimes = {};
     
     // Regular intervals
-    const intervals = [
-      { key: '5m', minutes: 5 },
-      { key: '1h', minutes: 60 },
-      { key: '4h', minutes: 240 },
-      { key: '2d', minutes: 2 * 1440 },
-      { key: '1w', minutes: 7 * 1440 }
-    ];
-    
-    intervals.forEach(interval => {
+    INTERVALS_CONFIG.forEach(interval => {
       const time = new Date(alertDate);
       time.setMinutes(time.getMinutes() + interval.minutes);
       updateTimes[interval.key] = time.toISOString();
@@ -101,6 +96,25 @@ class AlertScheduler {
     
     // Only update if it's time and market is open
     return now >= nextUpdate && this.isMarketOpen(now);
+  }
+
+  // Get all interval keys (including special ones)
+  static getAllIntervalKeys() {
+    return [
+      ...INTERVALS_CONFIG.map(interval => interval.key),
+      'next',
+      'next_4h'
+    ];
+  }
+
+  // Get regular interval keys (excluding special ones)
+  static getRegularIntervalKeys() {
+    return INTERVALS_CONFIG.map(interval => interval.key);
+  }
+
+  // Get interval configuration
+  static getIntervalsConfig() {
+    return INTERVALS_CONFIG;
   }
 }
 

@@ -1,5 +1,6 @@
 import React from 'react';
 
+// Centralized intervals configuration (matching backend)
 const intervals = [
   { key: '5m', label: 'Δ@5m' },
   { key: '1h', label: 'Δ@1h' },
@@ -7,7 +8,10 @@ const intervals = [
   { key: 'next', label: 'Δ@next' },
   { key: 'next_4h', label: 'Δ@next+4h' },
   { key: '2d', label: 'Δ@2d' },
-  { key: '1w', label: 'Δ@1w' }
+  { key: '1w', label: 'Δ@1w' },
+  { key: '14d', label: 'Δ@14d' },
+  { key: '1m', label: 'Δ@1m' },
+  { key: '3m', label: 'Δ@3m' }
 ];
 
 const fmtDiff = (price, initial) => {

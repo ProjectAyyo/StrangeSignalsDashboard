@@ -83,6 +83,9 @@ function App() {
             price_next_4h
             price_2d
             price_1w
+            price_14d
+            price_1m
+            price_3m
             accuracy_5m
             accuracy_1h
             accuracy_4h
@@ -90,6 +93,9 @@ function App() {
             accuracy_next_4h
             accuracy_2d
             accuracy_1w
+            accuracy_14d
+            accuracy_1m
+            accuracy_3m
             mfe
             mae
             grade
@@ -113,6 +119,9 @@ function App() {
         price_next_4h: a.price_next_4h,
         price_2d: a.price_2d,
         price_1w: a.price_1w,
+        price_14d: a.price_14d,
+        price_1m: a.price_1m,
+        price_3m: a.price_3m,
         accuracy_5m: a.accuracy_5m,
         accuracy_1h: a.accuracy_1h,
         accuracy_4h: a.accuracy_4h,
@@ -120,6 +129,9 @@ function App() {
         accuracy_next_4h: a.accuracy_next_4h,
         accuracy_2d: a.accuracy_2d,
         accuracy_1w: a.accuracy_1w,
+        accuracy_14d: a.accuracy_14d,
+        accuracy_1m: a.accuracy_1m,
+        accuracy_3m: a.accuracy_3m,
         mfe: a.mfe,
         mae: a.mae,
         grade: a.grade,
@@ -167,6 +179,9 @@ function App() {
                   price_next_4h
                   price_2d
                   price_1w
+                  price_14d
+                  price_1m
+                  price_3m
                   accuracy_5m
                   accuracy_1h
                   accuracy_4h
@@ -174,6 +189,9 @@ function App() {
                   accuracy_next_4h
                   accuracy_2d
                   accuracy_1w
+                  accuracy_14d
+                  accuracy_1m
+                  accuracy_3m
                   mfe
                   mae
                   grade
@@ -220,6 +238,9 @@ function App() {
                   price_next_4h
                   price_2d
                   price_1w
+                  price_14d
+                  price_1m
+                  price_3m
                   accuracy_5m
                   accuracy_1h
                   accuracy_4h
@@ -227,6 +248,9 @@ function App() {
                   accuracy_next_4h
                   accuracy_2d
                   accuracy_1w
+                  accuracy_14d
+                  accuracy_1m
+                  accuracy_3m
                   mfe
                   mae
                   grade

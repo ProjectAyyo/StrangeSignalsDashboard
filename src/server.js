@@ -374,7 +374,7 @@ async function smartUpdateAlert(alert) {
     })),
     // Special intervals
     { key: 'next', ready: now >= next930 && alert.price_next == null },
-    { key: 'next_4h', ready: now >= next930 + 4 * 60 * 60 * 1000 && alert.price_next_4h == null }
+    { key: 'next_4h', ready: now >= new Date(next930.getTime() + 4 * 60 * 60 * 1000) && alert.price_next_4h == null }
   ];
   
   let update = {};

@@ -64,7 +64,11 @@ const resolvers = {
   Mutation: {
     createAlert: async (_, { input }) => {
       const id = uuidv4();
-      const timestamp = new Date().toISOString();
+      let timestamp = new Date().toISOString();
+      if (!timestamp || isNaN(Date.parse(timestamp))) {
+        timestamp = new Date().toISOString();
+      }
+      console.log('[createAlert] Using timestamp:', timestamp);
       let price = input.price;
       if (price == null) {
         try {
@@ -88,11 +92,13 @@ const resolvers = {
       
       const alert = {
         id,
-        ...input,
+        symbol: input.symbol,
+        signal: input.signal,
         frame,
         price,
         timestamp,
         status: 'active',
+        notes: input.notes,
         next_update_time: nextUpdateTime,
         update_intervals: updateIntervals
       };

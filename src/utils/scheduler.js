@@ -49,12 +49,20 @@ class AlertScheduler {
   static getNextTradingDay930(alertTime) {
     // Use luxon to handle timezones
     let dt = DateTime.fromISO(alertTime, { zone: 'utc' }).setZone('America/New_York');
-    // Move to next day
-    dt = dt.plus({ days: 1 }).set({ hour: 9, minute: 30, second: 0, millisecond: 0 });
-    // Skip weekends
+    // If the input is a weekend, move to the next Monday
     while (dt.weekday === 6 || dt.weekday === 7) { // 6 = Saturday, 7 = Sunday
       dt = dt.plus({ days: 1 });
     }
+    // If the time is after or at 9:30am, move to the next day
+    if (dt.hour > 9 || (dt.hour === 9 && dt.minute >= 30)) {
+      dt = dt.plus({ days: 1 });
+      // Skip weekends again
+      while (dt.weekday === 6 || dt.weekday === 7) {
+        dt = dt.plus({ days: 1 });
+      }
+    }
+    // Set to 9:30am
+    dt = dt.set({ hour: 9, minute: 30, second: 0, millisecond: 0 });
     // Convert back to UTC for storage/calculation
     return dt.setZone('utc').toJSDate();
   }
@@ -71,7 +79,13 @@ class AlertScheduler {
   }
   
   static calculateAllUpdateTimes(alertTime) {
-    const alertDate = new Date(alertTime);
+    console.log('[calculateAllUpdateTimes] Received alertTime:', alertTime);
+    let alertDate = new Date(alertTime);
+    console.log('[calculateAllUpdateTimes] Parsed alertDate:', alertDate);
+    if (!alertTime || isNaN(alertDate.getTime())) {
+      alertDate = new Date();
+      console.log('[calculateAllUpdateTimes] Fallback to current date:', alertDate);
+    }
     const updateTimes = {};
     
     // Regular intervals
@@ -83,11 +97,19 @@ class AlertScheduler {
     
     // Next trading day intervals
     const nextTradingDay = this.getNextTradingDay930(alertDate);
-    updateTimes.next = nextTradingDay.toISOString();
-    
-    const nextTradingDay4h = new Date(nextTradingDay);
-    nextTradingDay4h.setHours(nextTradingDay4h.getHours() + 4);
-    updateTimes.next_4h = nextTradingDay4h.toISOString();
+    if (nextTradingDay && !isNaN(nextTradingDay.getTime())) {
+      updateTimes.next = nextTradingDay.toISOString();
+      const nextTradingDay4h = new Date(nextTradingDay);
+      nextTradingDay4h.setHours(nextTradingDay4h.getHours() + 4);
+      if (!isNaN(nextTradingDay4h.getTime())) {
+        updateTimes.next_4h = nextTradingDay4h.toISOString();
+      } else {
+        updateTimes.next_4h = null;
+      }
+    } else {
+      updateTimes.next = null;
+      updateTimes.next_4h = null;
+    }
     
     return updateTimes;
   }

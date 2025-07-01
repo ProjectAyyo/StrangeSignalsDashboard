@@ -81,26 +81,19 @@ const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
 
 // Helper function to extract signal data from webhook content
 function extractSignalData(content) {
-  let symbol, signal, price, notes;
-  
+  let symbol, signal, frame, notes;
   if (typeof content === 'string') {
-    // Try to parse content string format: "SYMBOL Buy/Sell [at price] [- notes]"
-    const match = content.match(/^(\w+)\s+(Buy|Sell)(?:\s+at\s+(\d+(?:\.\d+)?))?\s*(?:-\s*(.+))?$/i);
-    if (match) {
-      [, symbol, signal, price, notes] = match;
-      symbol = symbol.toUpperCase();
-      signal = signal.charAt(0).toUpperCase() + signal.slice(1).toLowerCase();
-      if (price) price = parseFloat(price);
-    }
+    const parts = content.trim().split(/\s+/);
+    symbol = parts[0]?.toUpperCase();
+    signal = parts[1]?.charAt(0).toUpperCase() + parts[1]?.slice(1).toLowerCase();
+    frame = parts[2] || null;
+    notes = parts.slice(3).join(' ');
   } else if (typeof content === 'object') {
-    // Extract from object format
-    ({ symbol, signal, price, notes } = content);
+    ({ symbol, signal, frame, notes } = content);
     if (symbol) symbol = symbol.toUpperCase();
     if (signal) signal = signal.charAt(0).toUpperCase() + signal.slice(1).toLowerCase();
-    if (typeof price === 'string') price = parseFloat(price);
   }
-  
-  return { symbol, signal, price, notes };
+  return { symbol, signal, frame, notes };
 }
 
 // Add this after app and before startServer()
@@ -110,32 +103,31 @@ app.post('/webhook', express.json(), async (req, res) => {
   try {
     const { content } = req.body;
     // Extract signal data
-    let { symbol, signal, price, notes } = extractSignalData(content);
-    // Validate required fields (price is now optional)
+    let { symbol, signal, frame, notes } = extractSignalData(content);
+    // Validate required fields (only symbol and signal are required)
     if (!symbol || !signal) {
       return res.status(400).json({ 
         error: 'Missing required fields',
-        received: { symbol, signal, price, notes, content }
+        received: { symbol, signal, frame, notes, content }
       });
     }
     // If price is not provided, fetch from Finnhub
-    if (price == null) {
-      try {
-        price = await fetchFinnhubPrice(symbol);
-      } catch (fetchErr) {
-        return res.status(500).json({
-          error: 'Failed to fetch price from Finnhub',
-          details: fetchErr.message,
-          received: { symbol, signal, price, notes, content }
-        });
-      }
+    let price = null;
+    try {
+      price = await fetchFinnhubPrice(symbol);
+    } catch (fetchErr) {
+      return res.status(500).json({
+        error: 'Failed to fetch price from Finnhub',
+        details: fetchErr.message,
+        received: { symbol, signal, frame, notes, content }
+      });
     }
     // console.log('Creating alert with data:', { symbol, signal, price, notes });
     // 1. Store in alerts.db
     let alert;
     try {
       alert = await resolvers.Mutation.createAlert(null, { 
-        input: { symbol, signal, price, notes } 
+        input: { symbol, signal, frame, price, notes } 
       });
       // console.log('Alert created successfully:', alert);
     } catch (dbErr) {
@@ -144,7 +136,7 @@ app.post('/webhook', express.json(), async (req, res) => {
         error: 'Failed to create alert in DB',
         details: dbErr.message,
         stack: dbErr.stack,
-        received: { symbol, signal, price, notes, content }
+        received: { symbol, signal, frame, notes, content }
       });
     }
     // 3. Forward to Discord
@@ -154,8 +146,8 @@ app.post('/webhook', express.json(), async (req, res) => {
       // console.log('Discord message:', discordMessage);
       try {
         const discordResponse = await fetch(DISCORD_WEBHOOK_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ content: discordMessage })
         });
         // console.log('Discord response status:', discordResponse.status);
@@ -206,30 +198,6 @@ app.delete('/webhook/:id', async (req, res) => {
 const FINNHUB_API_KEY = process.env.FINNHUB_API_KEY;
 if (!FINNHUB_API_KEY) {
   // console.error('FINNHUB_API_KEY not set in .env. Price/accuracy worker will not run.');
-}
-
-// Helper function to extract signal data from webhook content
-function extractSignalData(content) {
-  let symbol, signal, price, notes;
-  
-  if (typeof content === 'string') {
-    // Try to parse content string format: "SYMBOL Buy/Sell [at price] [- notes]"
-    const match = content.match(/^(\w+)\s+(Buy|Sell)(?:\s+at\s+(\d+(?:\.\d+)?))?\s*(?:-\s*(.+))?$/i);
-    if (match) {
-      [, symbol, signal, price, notes] = match;
-      symbol = symbol.toUpperCase();
-      signal = signal.charAt(0).toUpperCase() + signal.slice(1).toLowerCase();
-      if (price) price = parseFloat(price);
-    }
-  } else if (typeof content === 'object') {
-    // Extract from object format
-    ({ symbol, signal, price, notes } = content);
-    if (symbol) symbol = symbol.toUpperCase();
-    if (signal) signal = signal.charAt(0).toUpperCase() + signal.slice(1).toLowerCase();
-    if (typeof price === 'string') price = parseFloat(price);
-  }
-  
-  return { symbol, signal, price, notes };
 }
 
 // Add this before startServer()
@@ -351,7 +319,7 @@ async function startServer() {
     await startServer();
   } catch (err) {
     // console.error('[BOOT] Fatal error during database initialization. Server will not start:', err);
-    process.exit(1);
+  process.exit(1);
   }
 })();
 

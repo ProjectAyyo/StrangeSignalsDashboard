@@ -7,7 +7,7 @@ env_variables:
   GCS_BUCKET: "signals-db-strange-signals-dashboard"
   PGHOST: "/cloudsql/strange-signals-dashboard:us-central1:signals-postgres"
   PGUSER: "signalsuser"
-  PGPASSWORD: "changeme123"
+  PGPASSWORD: "G7kz2pQw8rTnLx5vZs1bJm4eYq9XcVw"
   PGDATABASE: "signalsdb"
   PGPORT: "5432"
 

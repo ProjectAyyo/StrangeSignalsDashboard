@@ -39,6 +39,7 @@ const typeDefs = gql`
     symbol: String!
     signal: String!
     price: Float
+    frame: String
     notes: String
   }
 

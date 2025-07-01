@@ -12,7 +12,7 @@ gcloud run deploy signals-dashboard \
   --source . \
   --region us-central1 \
   --allow-unauthenticated \
-  --set-env-vars="DISCORD_WEBHOOK_URL=https://discordapp.com/api/webhooks/1194064309727277156/UGEhwvhxGKgq8SO6zW1NlunmLIHN0JFjbHXLUA7fkeRX4Di3pJUXsnq1RROq31cPP7vk,FINNHUB_API_KEY=d0hqe5pr01ql9qu6dci0d0hqe5pr01ql9qu6dcig,GCS_BUCKET=signals-db-strange-signals-dashboard,PGHOST=/cloudsql/strange-signals-dashboard:us-central1:signals-postgres,PGUSER=signalsuser,PGPASSWORD=changeme123,PGDATABASE=signalsdb,PGPORT=5432"
+  --set-env-vars="DISCORD_WEBHOOK_URL=https://discordapp.com/api/webhooks/1194064309727277156/UGEhwvhxGKgq8SO6zW1NlunmLIHN0JFjbHXLUA7fkeRX4Di3pJUXsnq1RROq31cPP7vk,FINNHUB_API_KEY=d0hqe5pr01ql9qu6dci0d0hqe5pr01ql9qu6dcig,GCS_BUCKET=signals-db-strange-signals-dashboard,PGHOST=/cloudsql/strange-signals-dashboard:us-central1:signals-postgres,PGUSER=signalsuser,PGPASSWORD=G7kz2pQw8rTnLx5vZs1bJm4eYq9XcVw,PGDATABASE=signalsdb,PGPORT=5432"
 
 # Wait for deployment to be ready
 echo "⏳ Waiting for deployment to be ready..."

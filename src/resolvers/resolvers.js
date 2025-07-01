@@ -78,10 +78,10 @@ const resolvers = {
         }
       }
       
-      // Extract frame from notes (if present)
-      let frame = null;
-      if (input.notes) {
-        // Use the first word or label in notes as the frame (customize as needed)
+      // Use the frame from extractSignalData if provided, otherwise extract from notes
+      let frame = input.frame;
+      if (!frame && input.notes) {
+        // Only extract frame from notes if no frame was already provided
         frame = input.notes.split(/\s+/)[0];
       }
       

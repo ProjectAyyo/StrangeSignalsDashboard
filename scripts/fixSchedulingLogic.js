@@ -1,6 +1,13 @@
 const db = require('../src/db/database');
 const AlertScheduler = require('../src/utils/scheduler');
 
+// Set environment variables for Cloud SQL connection
+process.env.PGHOST = '/cloudsql/strange-signals-dashboard:us-central1:signals-postgres';
+process.env.PGUSER = 'signalsuser';
+process.env.PGPASSWORD = 'G7kz2pQw8rTnLx5vZs1bJm4eYq9XcVw';
+process.env.PGDATABASE = 'signalsdb';
+process.env.PGPORT = '5432';
+
 async function fixSchedulingLogic() {
   try {
     await db.init();

@@ -12,6 +12,7 @@ const typeDefs = gql`
     notes: String
     price_5m: Float
     price_1h: Float
+    price_2h: Float
     price_4h: Float
     price_next: Float
     price_next_4h: Float
@@ -22,6 +23,7 @@ const typeDefs = gql`
     price_3m: Float
     accuracy_5m: Int
     accuracy_1h: Int
+    accuracy_2h: Int
     accuracy_4h: Int
     accuracy_next: Int
     accuracy_next_4h: Int

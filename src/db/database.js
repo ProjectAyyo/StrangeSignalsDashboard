@@ -33,6 +33,7 @@ class Database {
             notes TEXT,
             price_5m REAL,
             price_1h REAL,
+            price_2h REAL,
             price_4h REAL,
             price_next REAL,
             price_next_4h REAL,
@@ -43,6 +44,7 @@ class Database {
             price_3m REAL,
             accuracy_5m INTEGER,
             accuracy_1h INTEGER,
+            accuracy_2h INTEGER,
             accuracy_4h INTEGER,
             accuracy_next INTEGER,
             accuracy_next_4h INTEGER,
@@ -80,8 +82,8 @@ class Database {
 
     // Add new interval columns if they don't exist
     const newColumns = [
-      'price_14d', 'price_1m', 'price_3m',
-      'accuracy_14d', 'accuracy_1m', 'accuracy_3m'
+      'price_2h', 'price_14d', 'price_1m', 'price_3m',
+      'accuracy_2h', 'accuracy_14d', 'accuracy_1m', 'accuracy_3m'
     ];
     
     for (const column of newColumns) {

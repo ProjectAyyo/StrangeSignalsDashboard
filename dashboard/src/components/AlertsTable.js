@@ -9,6 +9,7 @@ const INTERVAL_GROUPS = [
     intervals: [
       { key: '5m', label: 'Δ@5m' },
       { key: '1h', label: 'Δ@1h' },
+      { key: '2h', label: 'Δ@2h' },
       { key: '4h', label: 'Δ@4h' },
       { key: 'next', label: 'Δ@next' },
       { key: 'next_4h', label: 'Δ@next+4h' }

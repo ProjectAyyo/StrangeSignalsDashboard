@@ -526,63 +526,7 @@ app.get('/scheduler/health', async (req, res) => {
   }
 });
 
-// Fix scheduling logic endpoint
-app.post('/scheduler/fix-scheduling', async (req, res) => {
-  try {
-    console.log('[FixScheduling] Starting scheduling logic fix...');
-    
-    // Get all active alerts
-    const alerts = await db.query(`
-      SELECT * FROM alerts 
-      WHERE status = 'active' 
-      ORDER BY timestamp DESC
-    `);
 
-    if (alerts.length === 0) {
-      console.log('[FixScheduling] No alerts found.');
-      return res.status(200).json({ status: 'no_alerts', count: 0 });
-    }
-
-    console.log(`[FixScheduling] Found ${alerts.length} alerts to fix`);
-
-    let fixedCount = 0;
-    for (const alert of alerts) {
-      try {
-        // Recalculate scheduling information with the new logic
-        const updateIntervals = AlertScheduler.calculateAllUpdateTimes(alert.timestamp);
-        const nextUpdate = AlertScheduler.getNextUpdateTime(alert.timestamp);
-        const nextUpdateTime = nextUpdate ? nextUpdate.nextTime.toISOString() : null;
-
-        // Update the alert with corrected scheduling information
-        await db.runQuery(
-          'UPDATE alerts SET next_update_time = $1, update_intervals = $2 WHERE id = $3',
-          [nextUpdateTime, JSON.stringify(updateIntervals), alert.id]
-        );
-
-        console.log(`[FixScheduling] Fixed alert ${alert.id} (${alert.symbol}) - next_update_time: ${nextUpdateTime}`);
-        fixedCount++;
-      } catch (err) {
-        console.error(`[FixScheduling] Error fixing alert ${alert.id}:`, err);
-      }
-    }
-
-    console.log(`[FixScheduling] Completed! Fixed ${fixedCount} alerts.`);
-    
-    res.status(200).json({ 
-      status: 'success', 
-      fixed: fixedCount,
-      total: alerts.length,
-      timestamp: new Date().toISOString()
-    });
-  } catch (err) {
-    console.error('[FixScheduling] Failed:', err);
-    res.status(500).json({ 
-      status: 'error', 
-      error: err.message,
-      timestamp: new Date().toISOString()
-    });
-  }
-});
 
 // Cache management endpoint
 app.get('/cache/stats', (req, res) => {

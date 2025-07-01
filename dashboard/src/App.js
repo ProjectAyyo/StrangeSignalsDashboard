@@ -78,6 +78,7 @@ function App() {
               notes
             price_5m
             price_1h
+            price_2h
               price_4h
               price_next
             price_next_4h
@@ -88,6 +89,7 @@ function App() {
             price_3m
             accuracy_5m
             accuracy_1h
+            accuracy_2h
               accuracy_4h
               accuracy_next
             accuracy_next_4h
@@ -116,6 +118,7 @@ function App() {
           timestamp: a.timestamp,
         price_5m: a.price_5m,
         price_1h: a.price_1h,
+        price_2h: a.price_2h,
           price_4h: a.price_4h,
           price_next: a.price_next,
         price_next_4h: a.price_next_4h,
@@ -126,6 +129,7 @@ function App() {
         price_3m: a.price_3m,
         accuracy_5m: a.accuracy_5m,
         accuracy_1h: a.accuracy_1h,
+        accuracy_2h: a.accuracy_2h,
           accuracy_4h: a.accuracy_4h,
           accuracy_next: a.accuracy_next,
         accuracy_next_4h: a.accuracy_next_4h,
@@ -176,6 +180,7 @@ function App() {
                   notes
                   price_5m
                   price_1h
+                  price_2h
                   price_4h
                   price_next
                   price_next_4h
@@ -186,6 +191,7 @@ function App() {
                   price_3m
                   accuracy_5m
                   accuracy_1h
+                  accuracy_2h
                   accuracy_4h
                   accuracy_next
                   accuracy_next_4h
@@ -236,6 +242,7 @@ function App() {
                   notes
                   price_5m
                   price_1h
+                  price_2h
                   price_4h
                   price_next
                   price_next_4h
@@ -246,6 +253,7 @@ function App() {
                   price_3m
                   accuracy_5m
                   accuracy_1h
+                  accuracy_2h
                   accuracy_4h
                   accuracy_next
                   accuracy_next_4h

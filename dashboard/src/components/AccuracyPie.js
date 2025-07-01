@@ -4,7 +4,7 @@ import { PieChart, Pie, Tooltip, Cell, Legend } from 'recharts';
 export default function AccuracyPie({ alerts }) {
   // Count each alert as accurate if any interval is accurate
   const allFlags = alerts.map(a =>
-    [a.accuracy_5m, a.accuracy_1h, a.accuracy_4h, a.accuracy_next, a.accuracy_next_4h, a.accuracy_2d, a.accuracy_1w, a.accuracy_14d, a.accuracy_1m, a.accuracy_3m].some(v => v === 1) ? 1 : 0
+    [a.accuracy_5m, a.accuracy_1h, a.accuracy_2h, a.accuracy_4h, a.accuracy_next, a.accuracy_next_4h, a.accuracy_2d, a.accuracy_1w, a.accuracy_14d, a.accuracy_1m, a.accuracy_3m].some(v => v === 1) ? 1 : 0
   );
   const total = allFlags.length;
   const correct = allFlags.filter(v => v === 1).length;

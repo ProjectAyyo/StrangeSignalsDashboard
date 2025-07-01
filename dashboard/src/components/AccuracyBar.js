@@ -2,7 +2,7 @@ import React from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 
 export default function AccuracyBar({ alerts }) {
-  const intervals = ['5m', '1h', '4h', 'next', 'next_4h', '2d', '1w', '14d', '1m', '3m'];
+  const intervals = ['5m', '1h', '2h', '4h', 'next', 'next_4h', '2d', '1w', '14d', '1m', '3m'];
   const data = intervals.map(key => {
     const flags = alerts.map(a => a[`accuracy_${key}`]).filter(v => v != null);
     const total = flags.length;

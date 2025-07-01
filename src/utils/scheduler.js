@@ -5,6 +5,7 @@ const { DateTime } = require('luxon');
 const INTERVALS_CONFIG = [
   { key: '5m', minutes: 5, label: '5 minutes' },
   { key: '1h', minutes: 60, label: '1 hour' },
+  { key: '2h', minutes: 120, label: '2 hours' },
   { key: '4h', minutes: 240, label: '4 hours' },
   { key: '2d', minutes: 2 * 1440, label: '2 days' },
   { key: '1w', minutes: 7 * 1440, label: '1 week' },

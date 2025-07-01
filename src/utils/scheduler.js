@@ -20,26 +20,34 @@ class AlertScheduler {
     const diffMs = now - alertDate;
     const diffMinutes = diffMs / (1000 * 60);
     
-    // Find the next interval that needs updating
+    // Calculate all possible next update times
+    const possibleUpdates = [];
+    
+    // Regular intervals
     for (const interval of INTERVALS_CONFIG) {
       if (diffMinutes < interval.minutes) {
         const nextTime = new Date(alertDate);
         nextTime.setMinutes(nextTime.getMinutes() + interval.minutes);
-        return { nextTime, interval: interval.key };
+        possibleUpdates.push({ nextTime, interval: interval.key });
       }
     }
     
-    // If all intervals are past, check for next trading day
+    // Next trading day intervals
     const nextTradingDay = this.getNextTradingDay930(alertDate);
-    if (now < nextTradingDay) {
-      return { nextTime: nextTradingDay, interval: 'next' };
+    if (nextTradingDay && now < nextTradingDay) {
+      possibleUpdates.push({ nextTime: nextTradingDay, interval: 'next' });
     }
     
     const nextTradingDay4h = new Date(nextTradingDay);
     nextTradingDay4h.setHours(nextTradingDay4h.getHours() + 4);
+    if (nextTradingDay4h && now < nextTradingDay4h) {
+      possibleUpdates.push({ nextTime: nextTradingDay4h, interval: 'next_4h' });
+    }
     
-    if (now < nextTradingDay4h) {
-      return { nextTime: nextTradingDay4h, interval: 'next_4h' };
+    // Return the earliest update time
+    if (possibleUpdates.length > 0) {
+      possibleUpdates.sort((a, b) => a.nextTime.getTime() - b.nextTime.getTime());
+      return possibleUpdates[0];
     }
     
     // All updates are complete

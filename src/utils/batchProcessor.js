@@ -74,7 +74,7 @@ class BatchProcessor {
         key: interval.key,
         ready: diffMinutes >= interval.minutes && alert[`price_${interval.key}`] == null
       })),
-      // Special intervals
+      // Special intervals - check if they're due and not already updated
       { key: 'next', ready: now >= next930 && alert.price_next == null },
       { key: 'next_4h', ready: now >= new Date(next930.getTime() + 4 * 60 * 60 * 1000) && alert.price_next_4h == null }
     ];

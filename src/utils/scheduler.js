@@ -60,6 +60,13 @@ class AlertScheduler {
     
     // Return the earliest update time
     if (possibleUpdates.length > 0) {
+      // Prioritize immediate updates (when nextTime is now) over future updates
+      const immediateUpdates = possibleUpdates.filter(update => update.nextTime.getTime() === now.getTime());
+      if (immediateUpdates.length > 0) {
+        // If there are immediate updates, return the first one
+        return immediateUpdates[0];
+      }
+      // Otherwise, sort by time and return the earliest
       possibleUpdates.sort((a, b) => a.nextTime.getTime() - b.nextTime.getTime());
       return possibleUpdates[0];
     }

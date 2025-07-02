@@ -35,14 +35,27 @@ class AlertScheduler {
     
     // Next trading day intervals
     const nextTradingDay = this.getNextTradingDay930(alertDate);
-    if (nextTradingDay && now < nextTradingDay) {
-      possibleUpdates.push({ nextTime: nextTradingDay, interval: 'next' });
-    }
-    
-    const nextTradingDay4h = new Date(nextTradingDay);
-    nextTradingDay4h.setHours(nextTradingDay4h.getHours() + 4);
-    if (nextTradingDay4h && now < nextTradingDay4h) {
-      possibleUpdates.push({ nextTime: nextTradingDay4h, interval: 'next_4h' });
+    if (nextTradingDay) {
+      // Check if next trading day update is due (either past due or current)
+      if (now >= nextTradingDay) {
+        // If it's past due, set it to now to trigger immediate update
+        possibleUpdates.push({ nextTime: now, interval: 'next' });
+      } else {
+        // If it's in the future, schedule it normally
+        possibleUpdates.push({ nextTime: nextTradingDay, interval: 'next' });
+      }
+      
+      // Check next trading day + 4h
+      const nextTradingDay4h = new Date(nextTradingDay);
+      nextTradingDay4h.setHours(nextTradingDay4h.getHours() + 4);
+      
+      if (now >= nextTradingDay4h) {
+        // If it's past due, set it to now to trigger immediate update
+        possibleUpdates.push({ nextTime: now, interval: 'next_4h' });
+      } else {
+        // If it's in the future, schedule it normally
+        possibleUpdates.push({ nextTime: nextTradingDay4h, interval: 'next_4h' });
+      }
     }
     
     // Return the earliest update time
@@ -129,8 +142,20 @@ class AlertScheduler {
     const now = new Date();
     const nextUpdate = new Date(alert.next_update_time);
     
-    // Only update if it's time and market is open
-    return now >= nextUpdate && this.isMarketOpen(now);
+    // Update if it's time (including past due) and market is open
+    // For past due updates, we still want to process them even if market is closed
+    // to catch up on missed updates
+    if (now >= nextUpdate) {
+      // If the update is more than 1 hour past due, process it regardless of market status
+      const hoursPastDue = (now - nextUpdate) / (1000 * 60 * 60);
+      if (hoursPastDue > 1) {
+        return true;
+      }
+      // Otherwise, only update if market is open
+      return this.isMarketOpen(now);
+    }
+    
+    return false;
   }
 
   // Get all interval keys (including special ones)

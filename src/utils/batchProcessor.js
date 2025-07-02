@@ -164,16 +164,23 @@ class BatchProcessor {
     console.log('[Cache] Alerts due miss - querying database');
     
     const now = new Date();
+    // Query for alerts that are due for updates, including those that are past due
+    // Also include alerts that might have missed their next trading day updates
     const sql = `
       SELECT * FROM alerts 
       WHERE status = 'active' 
-      AND next_update_time IS NOT NULL 
-      AND next_update_time <= $1
-      ORDER BY next_update_time ASC
+      AND (
+        (next_update_time IS NOT NULL AND next_update_time <= $1)
+        OR 
+        (next_update_time IS NULL AND timestamp::timestamp < $2)
+      )
+      ORDER BY COALESCE(next_update_time, timestamp::timestamp) ASC
       LIMIT 50
     `;
     
-    const alerts = await db.query(sql, [now.toISOString()]);
+    // $1 is now, $2 is 24 hours ago to catch alerts that might have missed updates
+    const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const alerts = await db.query(sql, [now.toISOString(), twentyFourHoursAgo.toISOString()]);
     
     // Cache the result for 10 seconds (shorter TTL for this data)
     cache.set(cacheKey, alerts, 10000);

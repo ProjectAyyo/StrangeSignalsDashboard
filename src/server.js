@@ -113,8 +113,8 @@ app.post('/webhook', express.json(), async (req, res) => {
     }
     // If price is not provided, fetch from Finnhub
     let price = null;
-    try {
-      price = await fetchFinnhubPrice(symbol);
+      try {
+        price = await fetchFinnhubPrice(symbol);
     } catch (fetchErr) {
       return res.status(500).json({
         error: 'Failed to fetch price from Finnhub',
@@ -239,7 +239,7 @@ app.get('/health', async (req, res) => {
       lastAlert: (dbResult && dbResult[0] && dbResult[0].last_alert_timestamp) ? dbResult[0].last_alert_timestamp : null
     };
     console.log('[Health] Processed DB result:', health.database);
-  } catch (err) {
+      } catch (err) {
     console.error('[Health] Database error:', err);
     health.components.database = 'error';
     health.database = { error: err.message };

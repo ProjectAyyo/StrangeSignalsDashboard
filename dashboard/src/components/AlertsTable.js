@@ -138,7 +138,9 @@ export default function AlertsTable({ data, sortConfig, onSort }) {
           <tr key={row.id}>
             <td style={{ padding: 6 }}>{DateTime.fromISO(row.timestamp, { zone: 'utc' }).toLocal().toLocaleString(DateTime.DATETIME_MED_WITH_SECONDS)}</td>
             <td style={{ padding: 6 }}>{row.ticker}</td>
-            <td style={{ padding: 6 }}>{row.action}</td>
+            <td style={{ padding: 6, color: row.action === 'Sell' ? 'red' : row.action === 'Buy' ? 'green' : undefined, fontWeight: (row.action === 'Sell' || row.action === 'Buy') ? 'bold' : undefined }}>
+              {row.action}
+            </td>
             <td style={{ padding: 6 }}>{row.initial_price.toFixed(2)}</td>
               {group.intervals.map(({ key }) => (
               <React.Fragment key={key}>

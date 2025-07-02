@@ -61,8 +61,18 @@ class AlertScheduler {
     // Always prioritize immediate/past-due 'next' and 'next_4h' updates
     const immediate = possibleUpdates.find(u => (u.interval === 'next' || u.interval === 'next_4h') && u.nextTime.getTime() === now.getTime());
     if (immediate) {
+      console.log('[Scheduler] Found immediate update:', immediate);
       return immediate;
     }
+    
+    // If no immediate updates, check if any 'next' or 'next_4h' are past due
+    const pastDue = possibleUpdates.find(u => (u.interval === 'next' || u.interval === 'next_4h') && u.nextTime <= now);
+    if (pastDue) {
+      console.log('[Scheduler] Found past due update:', pastDue);
+      // Return it as immediate
+      return { nextTime: now, interval: pastDue.interval };
+    }
+    
     // Otherwise, return the earliest update time
     if (possibleUpdates.length > 0) {
       possibleUpdates.sort((a, b) => a.nextTime.getTime() - b.nextTime.getTime());

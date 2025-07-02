@@ -67,14 +67,14 @@ class BatchProcessor {
     // Get all interval keys from centralized configuration
     const allIntervalKeys = AlertScheduler.getAllIntervalKeys();
     
-    // Determine which intervals need updating
+    // Determine which intervals need updating (process ALL past-due intervals, not just the next one)
     const intervals = [
       // Regular intervals from configuration
       ...AlertScheduler.getIntervalsConfig().map(interval => ({
         key: interval.key,
         ready: diffMinutes >= interval.minutes && alert[`price_${interval.key}`] == null
       })),
-      // Special intervals - check if they're due and not already updated
+      // Special intervals - process if they're due and not already updated
       { key: 'next', ready: now >= next930 && alert.price_next == null },
       { key: 'next_4h', ready: now >= new Date(next930.getTime() + 4 * 60 * 60 * 1000) && alert.price_next_4h == null }
     ];
@@ -113,9 +113,39 @@ class BatchProcessor {
       update.grade = grade;
     }
     
-    // Calculate next update time
-    const nextUpdate = AlertScheduler.getNextUpdateTime(alert.timestamp);
-    update.next_update_time = nextUpdate ? nextUpdate.nextTime.toISOString() : null;
+    // Calculate next update time (find the next future interval that is not yet filled)
+    let nextUpdate = null;
+    for (const { key } of intervals) {
+      if (alert[`price_${key}`] == null && update[`price_${key}`] == null) {
+        // For regular intervals
+        if (key !== 'next' && key !== 'next_4h') {
+          const interval = AlertScheduler.getIntervalsConfig().find(i => i.key === key);
+          if (interval) {
+            const nextTime = new Date(alertTime);
+            nextTime.setMinutes(nextTime.getMinutes() + interval.minutes);
+            if (nextTime > now) {
+              nextUpdate = nextTime;
+              break;
+            }
+          }
+        } else if (key === 'next') {
+          const nextTradingDay = AlertScheduler.getNextTradingDay930(alertTime);
+          if (nextTradingDay > now) {
+            nextUpdate = nextTradingDay;
+            break;
+          }
+        } else if (key === 'next_4h') {
+          const nextTradingDay = AlertScheduler.getNextTradingDay930(alertTime);
+          const nextTradingDay4h = new Date(nextTradingDay);
+          nextTradingDay4h.setHours(nextTradingDay4h.getHours() + 4);
+          if (nextTradingDay4h > now) {
+            nextUpdate = nextTradingDay4h;
+            break;
+          }
+        }
+      }
+    }
+    update.next_update_time = nextUpdate ? nextUpdate.toISOString() : null;
     
     return updated || update.mfe !== undefined || update.mae !== undefined || update.grade !== undefined ? update : null;
   }
